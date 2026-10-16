@@ -270,6 +270,40 @@
     },
 
     {
+      id: 'legionella',
+      group: 'Infektionen',
+      short: 'Legionellen',
+      title: 'Legionella-Score',
+      subtitle: 'Ambulant erworbene Pneumonie: Wahrscheinlichkeit einer Legionellen-Infektion',
+      keywords: 'Legionellen Legionella Legionärskrankheit Pneumonie CAP Urin-Antigen Makrolid Fiumefreddo',
+      usage: {
+        when: 'Erwachsene mit ambulant erworbener Pneumonie in der Notaufnahme – abschätzen, wie wahrscheinlich Legionellen sind. Vor allem ein niedriger Score hilft, eine Legionellose auszuschließen und auf gezielte Diagnostik und Legionellen-wirksame Therapie zu verzichten.',
+        not: 'Nicht bei nosokomialer Pneumonie oder schwerer Immunsuppression untersucht. Ersetzt nicht den Urin-Antigentest bzw. die PCR. Bei schwerer Pneumonie, Ausbruchsgeschehen oder typischer Exposition (Reise mit Hotelaufenthalt, Whirlpool, Kühltürme) unabhängig vom Score auf Legionellen testen.',
+      },
+      items: [
+        bool('temp', 'Körpertemperatur > 39,4 °C', 1),
+        bool('sputum', 'Kein Auswurf', 1),
+        bool('na', 'Natrium < 133 mmol/l', 1),
+        bool('ldh', 'LDH > 225 U/l', 1),
+        bool('crp', 'CRP > 187 mg/l', 1, '= 18,7 mg/dl'),
+        bool('plt', 'Thrombozyten < 171/nl', 1, '/nl = 10³/µl'),
+      ],
+      interpret(total) {
+        if (total <= 1) return { level: 'low', label: 'Legionellen sehr unwahrscheinlich', text: 'In der Validierungsstudie lag der negative prädiktive Wert für weniger als 2 Punkte bei etwa 99 %. Gezielte Legionellen-Diagnostik meist entbehrlich, sofern keine Exposition, kein Ausbruch und kein schwerer Verlauf vorliegen.' };
+        if (total <= 3) return { level: 'mid', label: 'Mittlere Wahrscheinlichkeit', text: 'Legionellen nicht ausgeschlossen. Urin-Antigentest erwägen; bei positivem Befund Legionellen-wirksame Therapie (Makrolid oder Fluorchinolon).' };
+        return { level: 'high', label: 'Hohe Wahrscheinlichkeit', text: 'Legionellen-Diagnostik (Urin-Antigentest, ggf. PCR aus Atemwegsmaterial) und eine Legionellen-wirksame Therapie (Makrolid oder Fluorchinolon) erwägen.' };
+      },
+      notes: [
+        'Abgeleitet und validiert an Patienten mit ambulant erworbener Pneumonie in Schweizer Notaufnahmen.',
+        'Der Urin-Antigentest erfasst nur Legionella pneumophila Serogruppe 1; ein negativer Test schließt andere Serogruppen nicht aus.',
+      ],
+      sources: [
+        { label: 'Fiumefreddo R et al. Clinical predictors for Legionella in patients presenting with community-acquired pneumonia to the emergency department. BMC Pulm Med 2009;9:4', url: 'https://doi.org/10.1186/1471-2466-9-4' },
+        { label: 'Haubitz S et al. Ruling out Legionella in community-acquired pneumonia. Am J Med 2014;127(10):1010.e11–1010.e19', url: 'https://doi.org/10.1016/j.amjmed.2014.03.042' },
+      ],
+    },
+
+    {
       id: 'heart',
       group: 'Kardiologie',
       short: 'HEART',

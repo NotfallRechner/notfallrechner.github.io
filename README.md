@@ -7,7 +7,7 @@ und Link zur Originalquelle.
 | Bereich | Scores |
 | --- | --- |
 | Notfall & Intensiv | qSOFA, SOFA, Glasgow Coma Scale |
-| Infektionen | CURB-65/CRB-65, Centor/McIsaac |
+| Infektionen | CURB-65/CRB-65, Centor/McIsaac, Legionella-Score |
 | Kardiologie | HEART, CHA₂DS₂-VA (ESC 2024), HAS-BLED |
 | Thrombose & Embolie | Wells LE, PERC, Wells TVT |
 | Neurologie | NIHSS, ABCD² |

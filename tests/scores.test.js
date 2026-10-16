@@ -140,6 +140,15 @@ test('Centor/McIsaac age correction', () => {
   assert.equal(evaluate(s, { temp: true, cough: true, age: 0 }).result.level, 'mid');
 });
 
+test('Legionella score bands 0–1 / 2–3 / 4–6', () => {
+  const s = byId.legionella;
+  assert.equal(s.max, 6);
+  assert.equal(evaluate(s, { temp: true }).result.level, 'low');
+  assert.equal(evaluate(s, { temp: true, na: true }).result.level, 'mid');
+  assert.equal(evaluate(s, { temp: true, na: true, ldh: true }).result.level, 'mid');
+  assert.equal(evaluate(s, { temp: true, na: true, ldh: true, crp: true }).result.level, 'high');
+});
+
 test('CHA2DS2-VA thresholds 0 / 1 / ≥ 2', () => {
   const s = byId.cha2ds2va;
   assert.equal(evaluate(s, { age: 0 }).result.level, 'low');
