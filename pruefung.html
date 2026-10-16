@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Prüfübersicht · NotfallRechner</title>
+  <meta name="description" content="Fachliche Prüfung des NotfallRechners: Kriterien, Grenzwerte und durchgerechnete Beispielfälle aller Rechner.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="review-page">
+  <header class="top">
+    <div class="brand-row">
+      <a class="brand" href="./">NotfallRechner</a>
+      <a class="search-open" href="./">Zur App</a>
+    </div>
+  </header>
+
+  <main>
+    <h1>Prüfübersicht</h1>
+    <p class="subtitle">
+      Für die fachliche Prüfung: Je Rechner stehen hier Anwendungsbereich, alle Kriterien mit Punkten und Grenzwerten,
+      die Interpretation in Beispielfällen und die Originalquellen. Die erwarteten Ergebnisse der Beispiele wurden von
+      Hand aus den Publikationen berechnet; ✓ zeigt, dass die App zum selben Ergebnis kommt.
+    </p>
+
+    <section class="review-panel">
+      <label class="review-field">
+        <span>Name der prüfenden Person</span>
+        <input id="reviewer" type="text" autocomplete="name" placeholder="z. B. Dr. Muster">
+      </label>
+      <p id="progress" class="review-progress"></p>
+      <div class="review-actions">
+        <button id="copy-log" type="button" class="copy">Prüfprotokoll kopieren</button>
+        <label class="review-filter"><input id="only-open" type="checkbox"> nur offene anzeigen</label>
+      </div>
+      <p class="hint">
+        Häkchen und Anmerkungen werden nur in diesem Browser gespeichert. Das Protokoll enthält für jeden geprüften
+        Rechner die Zeile für <code>js/scores.js</code> und alle Anmerkungen – per Mail oder als GitHub-Issue weitergeben.
+      </p>
+    </section>
+
+    <div id="list" class="review-list"></div>
+
+    <p class="footer"><span id="version"></span></p>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="js/version.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/scores.js"></script>
+  <script src="js/examples.js"></script>
+  <script src="js/review.js"></script>
+</body>
+</html>

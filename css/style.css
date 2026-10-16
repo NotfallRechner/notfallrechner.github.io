@@ -232,6 +232,93 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
 
 .hint { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
 
+/* Larger text: scales the whole layout, including the fixed result bar. */
+html.large-text body { zoom: 1.18; }
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
+
+/* Review page */
+.review-page main { padding-bottom: 40px; }
+.review-panel {
+  margin: 16px 0 8px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.review-field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.review-field input, .review-check textarea {
+  font: inherit;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.review-progress { margin: 12px 0 0; font-weight: 600; }
+.review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 4px 0 8px; }
+.review-filter { font-size: 14px; color: var(--muted); }
+.review-group {
+  margin: 24px 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.review-card {
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--mid);
+  border-radius: var(--radius);
+}
+.review-card[data-checked="true"] { border-left-color: var(--low); }
+.review-card summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.review-title { font-weight: 600; }
+.review-status { flex: none; font-size: 13.5px; color: var(--muted); }
+.review-body { padding: 0 14px 14px; }
+.review-body h3 { margin: 16px 0 6px; font-size: 15px; }
+.review-body p { margin: 0 0 6px; }
+.review-criteria { margin: 0; padding-left: 18px; }
+.review-criteria li { margin: 4px 0; }
+.review-criteria ul { margin: 2px 0; padding-left: 18px; font-size: 14.5px; }
+.review-crit-heading { list-style: none; margin-left: -18px !important; font-weight: 600; color: var(--muted); }
+.review-examples { display: grid; gap: 8px; }
+.review-example {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--low-soft);
+}
+.review-example[data-ok="false"] { background: var(--high-soft); }
+.review-example h4 { margin: 0 0 4px; font-size: 14px; }
+.review-inputs {
+  margin: 0 0 6px;
+  font: 13.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.review-result { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14.5px; }
+.review-ok { font-weight: 700; }
+.review-source { display: block; margin: 4px 0; color: var(--accent); font-size: 14px; overflow-wrap: anywhere; }
+.review-check { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.review-check label { font-weight: 600; }
+
 /* Start page */
 .home-title { font-size: 28px; }
 .home-intro { margin: 6px 0 16px; color: var(--muted); }
@@ -552,8 +639,10 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
   transform: translateX(-50%);
   width: min(688px, calc(100% - 24px));
   display: flex;
+  /* A label that does not fit next to the number moves to its own line. */
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px 8px;
   padding: 12px 16px;
   border-radius: 16px;
   background: var(--surface);
@@ -562,7 +651,7 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
   box-shadow: 0 8px 28px rgba(16, 24, 40, 0.16);
   z-index: 20;
 }
-.bar-name { font-size: 13px; font-weight: 600; color: var(--muted); align-self: center; }
+.bar-name { min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.2; color: var(--muted); align-self: center; hyphens: auto; }
 .bar-total {
   font-size: 30px;
   font-weight: 700;
@@ -580,10 +669,13 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
   color: var(--c);
   font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  text-align: right;
+  flex: 0 1 auto;
+  min-width: 4.5em;
+  /* Long labels wrap between words (or hyphenate) instead of being cut off. */
+  hyphens: auto;
+  border-radius: 12px;
 }
 .bar-jump {
   align-self: center;

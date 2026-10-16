@@ -3,6 +3,9 @@
 (function (root) {
   'use strict';
 
+  const CONFIG = typeof module !== 'undefined' && module.exports ? require('./config.js') : root.NotfallConfig;
+  const SYRINGES = CONFIG.perfusor.syringes;
+
   const bool = (id, label, points, hint) => ({ id, type: 'bool', label, points, hint });
   // Yes/no input that feeds a formula instead of adding points.
   const flag = (id, label, hint) => ({ id, type: 'bool', label, hint });
@@ -32,6 +35,8 @@
   const GLU = [unit('mg/dl', 1, 0), unit('mmol/l', 18.016, 1)];
   const ETOH = [unit('mg/dl', 1, 0), unit('g/l', 100, 2), unit('mmol/l', 4.607, 1)];
   const CA = [unit('mmol/l', 1, 2), unit('mg/dl', 0.2495, 1)];
+  const HB = [unit('g/dl', 1, 1), unit('g/l', 0.1, 0), unit('mmol/l', 1.611, 1)];
+  const SEX = (id) => choice(id, 'Geschlecht', [pick('Männlich', { key: 'm' }), pick('Weiblich', { key: 'f' })]);
 
   // Inputs with the same `shared` key are filled in from one calculator to the
   // next during a session; all of them must use the same canonical unit.
@@ -44,7 +49,7 @@
     'Kardiologie',
     'Thrombose & Embolie',
     'Neurologie',
-    'Leber',
+    'Gastro & Leber',
     'Niere & Labor',
     'Medikamente & Infusion',
   ];
@@ -300,6 +305,43 @@
     },
 
     {
+      id: 'pbw',
+      group: 'Notfall & Intensiv',
+      short: 'Tidalvolumen',
+      title: 'Idealgewicht und Tidalvolumen',
+      subtitle: 'Lungenprotektive Beatmung: Tidalvolumen nach dem Idealgewicht (predicted body weight)',
+      keywords: 'Beatmung Tidalvolumen Idealgewicht PBW predicted body weight ARDS lungenprotektiv Respirator Atemzugvolumen',
+      unit: 'kg',
+      usage: {
+        when: 'Invasive Beatmung – bei ARDS, aber auch allgemein bei Intensiv- und Notfallpatienten: das Tidalvolumen nach dem Idealgewicht einstellen, das nur von Körpergröße und Geschlecht abhängt.',
+        not: 'Formel für Erwachsene, nicht für Kinder. Nicht das tatsächliche Körpergewicht verwenden – bei Adipositas führt das zu deutlich zu großen Atemzugvolumina.',
+      },
+      items: [
+        num('height', 'Körpergröße', [unit('cm', 1, 0)], 130, 230, SHARED('height')),
+        SEX('sex'),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round(((a.sex.key === 'm' ? 50 : 45.5) + 0.91 * (a.height - 152.4)) * 10) / 10;
+      },
+      interpret(total) {
+        const vt = (ml) => ({ name: `${ml} ml/kg`, value: `${formatNumber(Math.round(total * ml / 10) * 10, 0)} ml`, note: ml === 6 ? 'Zielwert bei lungenprotektiver Beatmung' : ml === 4 ? 'untere Grenze' : 'obere Grenze', level: 'info' });
+        return {
+          level: 'info',
+          label: `Idealgewicht ${formatPoints(total)} kg`,
+          rows: [vt(6), vt(4), vt(8)],
+          text: 'Lungenprotektive Beatmung: Tidalvolumen 6 ml/kg Idealgewicht (Bereich 4–8 ml/kg), Plateaudruck höchstens 30 cmH₂O.',
+        };
+      },
+      notes: [
+        'Idealgewicht (ARDS Network): Männer 50 + 0,91 × (Größe in cm − 152,4), Frauen 45,5 + 0,91 × (Größe in cm − 152,4) kg.',
+      ],
+      sources: [
+        { label: 'The Acute Respiratory Distress Syndrome Network. Ventilation with lower tidal volumes as compared with traditional tidal volumes for acute lung injury and the acute respiratory distress syndrome. N Engl J Med 2000;342(18):1301–1308', url: 'https://doi.org/10.1056/NEJM200005043421801' },
+      ],
+    },
+
+    {
       id: 'ct-head',
       group: 'Trauma',
       short: 'CT Head',
@@ -424,6 +466,88 @@
       ],
       sources: [
         { label: 'Hoffman JR et al. Validity of a set of clinical criteria to rule out injury to the cervical spine in patients with blunt trauma. N Engl J Med 2000;343(2):94–99', url: 'https://doi.org/10.1056/NEJM200007133430203' },
+      ],
+    },
+
+    {
+      id: 'ottawa-ankle',
+      group: 'Trauma',
+      short: 'Ottawa Ankle',
+      title: 'Ottawa Ankle Rules',
+      subtitle: 'Sprunggelenk- und Mittelfußtrauma: Ist ein Röntgenbild nötig?',
+      keywords: 'Sprunggelenk OSG Knöchel Umknicktrauma Supinationstrauma Distorsion Mittelfuß Fuß Röntgen Fraktur',
+      rule: true,
+      usage: {
+        when: 'Erwachsene mit akutem Umknick- oder Sprunggelenktrauma: entscheiden, ob ein Röntgenbild von Sprunggelenk oder Fuß nötig ist. Die Sensitivität für relevante Frakturen liegt nahe 100 %.',
+        not: 'Nicht anwendbar bei Intoxikation, Mehrfachverletzung, eingeschränkter Sensibilität, Schwangerschaft, Verletzung älter als 10 Tage oder Wiedervorstellung. Bei Kindern nur eingeschränkt validiert.',
+      },
+      items: [
+        heading('Sprunggelenk'),
+        flag('mall', 'Schmerz im Bereich der Knöchel (Malleolen)'),
+        flag('lat', 'Druckschmerz an Hinterkante oder Spitze des Außenknöchels', 'distale 6 cm'),
+        flag('med', 'Druckschmerz an Hinterkante oder Spitze des Innenknöchels', 'distale 6 cm'),
+        heading('Mittelfuß'),
+        flag('mid', 'Schmerz im Mittelfußbereich'),
+        flag('mt5', 'Druckschmerz an der Basis des 5. Mittelfußknochens'),
+        flag('nav', 'Druckschmerz über dem Os naviculare'),
+        heading('Belastung'),
+        flag('nwb', 'Belastung nicht möglich', 'weder direkt nach dem Unfall noch in der Notaufnahme 4 Schritte (Hinken zählt als Schritt)'),
+      ],
+      max: null,
+      compute(a) {
+        return ['mall', 'lat', 'med', 'mid', 'mt5', 'nav', 'nwb'].filter((k) => a[k]).length;
+      },
+      interpret(total, a) {
+        const ankle = a.mall && (a.lat || a.med || a.nwb);
+        const foot = a.mid && (a.mt5 || a.nav || a.nwb);
+        if (ankle && foot) return { level: 'high', label: 'Röntgen Sprunggelenk und Fuß', text: 'Kriterien für beide Regionen erfüllt.' };
+        if (ankle) return { level: 'high', label: 'Röntgen Sprunggelenk', text: 'Schmerz im Knöchelbereich mit Druckschmerz an typischer Stelle oder fehlender Belastbarkeit.' };
+        if (foot) return { level: 'high', label: 'Röntgen Fuß', text: 'Schmerz im Mittelfußbereich mit Druckschmerz an typischer Stelle oder fehlender Belastbarkeit.' };
+        if (!a.mall && !a.mid) return { level: 'mid', label: 'Regel nicht anwendbar', text: 'Kein Schmerz im Knöchel- oder Mittelfußbereich angegeben – die Ottawa-Regeln greifen nur bei Schmerzen in diesen Zonen. Klinisch entscheiden.' };
+        return { level: 'low', label: 'Kein Röntgen nötig', text: 'Nach den Ottawa Ankle Rules ist kein Röntgenbild erforderlich. Wiedervorstellung bei anhaltenden Schmerzen oder fehlender Belastbarkeit nach etwa einer Woche.' };
+      },
+      related: [
+        { id: 'ottawa-knee', text: 'Knie mitbetroffen? Ottawa Knee Rule' },
+      ],
+      sources: [
+        { label: 'Stiell IG et al. A study to develop clinical decision rules for the use of radiography in acute ankle injuries. Ann Emerg Med 1992;21(4):384–390', url: 'https://doi.org/10.1016/S0196-0644(05)82656-3' },
+        { label: 'Stiell IG et al. Decision rules for the use of radiography in acute ankle injuries. Refinement and prospective validation. JAMA 1993;269(9):1127–1132', url: 'https://doi.org/10.1001/jama.1993.03500090063034' },
+      ],
+    },
+
+    {
+      id: 'ottawa-knee',
+      group: 'Trauma',
+      short: 'Ottawa Knee',
+      title: 'Ottawa Knee Rule',
+      subtitle: 'Akutes Knietrauma: Ist ein Röntgenbild nötig?',
+      keywords: 'Knie Kniegelenk Knietrauma Patella Fibulaköpfchen Röntgen Fraktur',
+      rule: true,
+      usage: {
+        when: 'Erwachsene mit akutem Knietrauma: entscheiden, ob ein Röntgenbild nötig ist. Ein Röntgenbild ist angezeigt, wenn mindestens eines der Kriterien vorliegt.',
+        not: 'Nicht anwendbar bei Intoxikation, Mehrfachverletzung, eingeschränkter Sensibilität, isolierten Hautverletzungen, Verletzung älter als 7 Tage oder Wiedervorstellung. Bei Kindern und Jugendlichen nur eingeschränkt validiert.',
+      },
+      items: [
+        flag('age', 'Alter ≥ 55 Jahre'),
+        flag('patella', 'Isolierter Druckschmerz der Patella', 'kein anderer knöcherner Druckschmerz am Knie'),
+        flag('fibula', 'Druckschmerz am Fibulaköpfchen'),
+        flag('flex', 'Beugung bis 90° nicht möglich'),
+        flag('nwb', 'Belastung nicht möglich', 'weder direkt nach dem Unfall noch in der Notaufnahme 4 Schritte (Hinken zählt als Schritt)'),
+      ],
+      max: null,
+      compute(a) {
+        return ['age', 'patella', 'fibula', 'flex', 'nwb'].filter((k) => a[k]).length;
+      },
+      interpret(total) {
+        if (total > 0) return { level: 'high', label: 'Röntgen Knie', text: 'Mindestens ein Kriterium der Ottawa Knee Rule erfüllt.' };
+        return { level: 'low', label: 'Kein Röntgen nötig', text: 'Keines der Kriterien erfüllt – nach der Ottawa Knee Rule ist kein Röntgenbild erforderlich.' };
+      },
+      related: [
+        { id: 'ottawa-ankle', text: 'Sprunggelenk mitbetroffen? Ottawa Ankle Rules' },
+      ],
+      sources: [
+        { label: 'Stiell IG et al. Derivation of a decision rule for the use of radiography in acute knee injuries. Ann Emerg Med 1995;26(4):405–413', url: 'https://doi.org/10.1016/S0196-0644(95)70106-0' },
+        { label: 'Stiell IG et al. Prospective validation of a decision rule for the use of radiography in acute knee injuries. JAMA 1996;275(8):611–615', url: 'https://doi.org/10.1001/jama.1996.03530320035031' },
       ],
     },
 
@@ -726,6 +850,52 @@
     },
 
     {
+      id: 'syncope',
+      group: 'Kardiologie',
+      short: 'Synkope',
+      title: 'Canadian Syncope Risk Score',
+      subtitle: 'Synkope in der Notaufnahme: Risiko für ein schwerwiegendes Ereignis in 30 Tagen',
+      keywords: 'Synkope Kollaps Bewusstlosigkeit Ohnmacht CSRS Aufnahme Entlassung',
+      usage: {
+        when: 'Erwachsene, die sich nach einer Synkope in der Notaufnahme vorstellen: nach Anamnese, Untersuchung, EKG und Troponin das Risiko für schwerwiegende Ereignisse (Tod, Arrhythmie, Myokardinfarkt, relevante strukturelle Herzerkrankung u. a.) in den folgenden 30 Tagen abschätzen.',
+        not: 'Nicht anwendbar bei anhaltender Bewusstseinsstörung, neuem neurologischem Defizit, Krampfanfall, Trauma als Ursache der Bewusstlosigkeit, Alter unter 16 Jahren oder wenn in der Notaufnahme bereits eine schwerwiegende Ursache gefunden wurde.',
+      },
+      items: [
+        heading('Klinische Beurteilung'),
+        bool('vaso', 'Prädisposition für vasovagale Symptome', -1, 'warme, volle Räume, langes Stehen, Angst, Emotion, Schmerz'),
+        bool('heart', 'Herzerkrankung in der Vorgeschichte', 1, 'KHK, Vorhofflimmern oder -flattern, Herzinsuffizienz, Herzklappenerkrankung'),
+        bool('bp', 'Systolischer Blutdruck < 90 oder > 180 mmHg', 2, 'irgendein Wert in der Notaufnahme'),
+        heading('Untersuchungen'),
+        bool('trop', 'Troponin erhöht', 2, 'über der 99. Perzentile'),
+        bool('axis', 'Abnorme QRS-Achse', 1, '< −30° oder > 100°'),
+        bool('qrs', 'QRS-Dauer > 130 ms', 1),
+        bool('qtc', 'QTc > 480 ms', 2),
+        heading('Diagnose in der Notaufnahme'),
+        choice('dx', 'Arbeitsdiagnose', [
+          opt(0, 'Unklar bzw. weder vasovagal noch kardial'),
+          opt(-2, 'Vasovagale Synkope'),
+          opt(2, 'Kardiale Synkope'),
+        ]),
+      ],
+      interpret(total) {
+        if (total <= -2) return { level: 'low', label: 'Sehr niedriges Risiko', text: 'Schwerwiegendes Ereignis in 30 Tagen in der Ableitungsstudie 0,4–0,7 %. Entlassung in der Regel möglich.' };
+        if (total <= 0) return { level: 'low', label: 'Niedriges Risiko', text: 'Schwerwiegendes Ereignis in 30 Tagen in der Ableitungsstudie 1,2–1,9 %. Entlassung in der Regel möglich.' };
+        if (total <= 3) return { level: 'mid', label: 'Mittleres Risiko', text: 'Schwerwiegendes Ereignis in 30 Tagen in der Ableitungsstudie 3,1–8,1 %. Weitere Abklärung, Monitorüberwachung erwägen.' };
+        if (total <= 5) return { level: 'high', label: 'Hohes Risiko', text: 'Schwerwiegendes Ereignis in 30 Tagen in der Ableitungsstudie 12,9–19,7 %. Stationäre Aufnahme mit Monitorüberwachung erwägen.' };
+        return { level: 'high', label: 'Sehr hohes Risiko', text: 'Schwerwiegendes Ereignis in 30 Tagen in der Ableitungsstudie 28,9–83,6 %. Stationäre Aufnahme mit Monitorüberwachung.' };
+      },
+      notes: [
+        'Spannweite −3 bis 11 Punkte. Vasovagale und kardiale Synkope schließen sich als Arbeitsdiagnose aus.',
+      ],
+      related: [
+        { id: 'heart', text: 'Brustschmerz dabei? HEART-Score' },
+      ],
+      sources: [
+        { label: 'Thiruganasambandamoorthy V et al. Development of the Canadian Syncope Risk Score to predict serious adverse events after emergency department assessment of syncope. CMAJ 2016;188(12):E289–E298', url: 'https://doi.org/10.1503/cmaj.151469' },
+      ],
+    },
+
+    {
       id: 'wells-le',
       group: 'Thrombose & Embolie',
       short: 'Wells LE',
@@ -990,8 +1160,96 @@
     },
 
     {
+      id: '4at',
+      group: 'Neurologie',
+      short: '4AT',
+      title: '4AT',
+      subtitle: 'Schnelles Delir-Screening in unter zwei Minuten (0–12 Punkte)',
+      keywords: '4AT Delir Delirium Verwirrtheit kognitive Störung Demenz geriatrisch Screening',
+      usage: {
+        when: 'Ältere oder akut erkrankte Patienten in Notaufnahme, auf Station oder nach Operationen: schnelles Delir-Screening ohne besondere Schulung, auch bei Patienten, die nicht vollständig testbar sind.',
+        not: 'Screening, keine Diagnose – ein auffälliges Ergebnis erfordert eine ärztliche Beurteilung. Bei Sprach- oder Hörbarrieren eingeschränkt aussagekräftig.',
+      },
+      items: [
+        choice('alert', '1 · Wachheit', [
+          opt(0, 'Normal', { hint: 'vollständig wach, nicht agitiert' }),
+          opt(0, 'Leicht schläfrig', { hint: 'nach dem Wecken innerhalb von 10 Sekunden normal' }),
+          opt(4, 'Deutlich auffällig', { hint: 'schwer weckbar, schläfrig oder agitiert bzw. hyperaktiv' }),
+        ]),
+        choice('amt4', '2 · AMT4', [
+          opt(0, 'Kein Fehler'),
+          opt(1, '1 Fehler'),
+          opt(2, '2 oder mehr Fehler oder nicht testbar'),
+        ], 'Alter, Geburtsdatum, Ort (Name der Klinik oder des Gebäudes), aktuelles Jahr'),
+        choice('att', '3 · Aufmerksamkeit', [
+          opt(0, '7 oder mehr Monate richtig'),
+          opt(1, 'Beginnt, aber weniger als 7 Monate richtig oder verweigert'),
+          opt(2, 'Nicht testbar', { hint: 'kann wegen Unwohlsein, Schläfrigkeit oder Unaufmerksamkeit nicht beginnen' }),
+        ], 'Monate rückwärts aufsagen, beginnend mit Dezember'),
+        choice('acute', '4 · Akute Veränderung oder fluktuierender Verlauf', [
+          opt(0, 'Nein'),
+          opt(4, 'Ja', { hint: 'Aufmerksamkeit, Kognition oder andere geistige Funktionen in den letzten 2 Wochen verändert und noch vorhanden' }),
+        ], 'Auch aus Fremdanamnese, Pflegedokumentation oder Vorbefunden'),
+      ],
+      interpret(total) {
+        if (total >= 4) return { level: 'high', label: 'Delir möglich', text: 'Mit oder ohne kognitive Beeinträchtigung. Ärztliche Beurteilung und Suche nach Auslösern: Infektion, Medikamente, Elektrolytstörung, Hypoxie, Schmerz, Harnverhalt, Obstipation, Entzug.' };
+        if (total >= 1) return { level: 'mid', label: 'Kognitive Beeinträchtigung möglich', text: 'Weitere kognitive Testung erwägen. Ein Delir ist nicht sicher ausgeschlossen, wenn die Angaben zu Punkt 4 unvollständig sind.' };
+        return { level: 'low', label: 'Delir unwahrscheinlich', text: 'Delir oder schwere kognitive Beeinträchtigung unwahrscheinlich. Ein Delir bleibt möglich, wenn die Angaben zu Punkt 4 unvollständig sind.' };
+      },
+      sources: [
+        { label: 'Bellelli G et al. Validation of the 4AT, a new instrument for rapid delirium screening: a study in 234 hospitalised older people. Age Ageing 2014;43(4):496–502', url: 'https://doi.org/10.1093/ageing/afu021' },
+        { label: 'Tieges Z et al. Diagnostic accuracy of the 4AT for delirium detection in older adults: systematic review and meta-analysis. Age Ageing 2021;50(3):733–743', url: 'https://doi.org/10.1093/ageing/afaa224' },
+      ],
+    },
+
+    {
+      id: 'gbs',
+      group: 'Gastro & Leber',
+      short: 'Blatchford',
+      title: 'Glasgow-Blatchford-Score',
+      subtitle: 'Obere gastrointestinale Blutung: Bedarf an Intervention und ambulante Führbarkeit (0–23 Punkte)',
+      keywords: 'Blatchford GBS GI-Blutung gastrointestinale Blutung obere Hämatemesis Meläna Teerstuhl Kaffeesatz Ulkus Endoskopie Gastroskopie',
+      usage: {
+        when: 'Obere gastrointestinale Blutung (Hämatemesis, Kaffeesatzerbrechen, Meläna) vor der Endoskopie: abschätzen, ob eine Intervention (Transfusion, endoskopische Therapie, Operation) nötig wird – vor allem, um Patienten mit sehr niedrigem Risiko ambulant führen zu können.',
+        not: 'Nicht für untere GI-Blutungen. Ersetzt nicht die Kreislaufstabilisierung – instabile Patienten unabhängig vom Score sofort versorgen. Unter Antikoagulation und bei Verdacht auf Varizenblutung besonders vorsichtig entscheiden.',
+      },
+      items: [
+        num('urea', 'Harnstoff', UREA, 5, 600, SHARED('urea')),
+        SEX('sex'),
+        num('hb', 'Hämoglobin', HB, 2, 25, SHARED('hb')),
+        num('sbp', 'Systolischer Blutdruck', MMHG, 30, 300, SHARED('sbp')),
+        bool('hr', 'Puls ≥ 100/min', 1),
+        bool('melena', 'Meläna', 1),
+        bool('syncope', 'Synkope', 2),
+        bool('liver', 'Lebererkrankung', 2, 'anamnestisch oder klinisch'),
+        bool('chf', 'Herzinsuffizienz', 2, 'anamnestisch oder klinisch'),
+      ],
+      max: 23,
+      compute(a) {
+        const p = gbsParts(a);
+        return p.urea + p.hb + p.sbp + p.other;
+      },
+      interpret(total, a) {
+        const p = gbsParts(a);
+        const parts = `Harnstoff ${p.urea} · Hämoglobin ${p.hb} · Blutdruck ${p.sbp} · weitere ${p.other}.`;
+        if (total <= 1) return { level: 'low', label: 'Sehr niedriges Risiko', text: `${parts} Nach der ESGE-Leitlinie ist bei einem Score ≤ 1 keine stationäre Aufnahme und keine frühe Endoskopie nötig, sofern nichts anderes dagegen spricht; ambulante Abklärung.` };
+        if (total <= 6) return { level: 'mid', label: 'Intervention möglich', text: `${parts} Stationäre Aufnahme; Endoskopie innerhalb von 24 Stunden nach hämodynamischer Stabilisierung.` };
+        return { level: 'high', label: 'Hohes Risiko', text: `${parts} Hohe Wahrscheinlichkeit für Transfusion, endoskopische Therapie oder Operation. Stabilisieren, Endoskopie innerhalb von 24 Stunden – bei Instabilität früher.` };
+      },
+      notes: [
+        'Harnstoff (mmol/l): < 6,5 → 0, 6,5–7,9 → 2, 8–9,9 → 3, 10–24,9 → 4, ≥ 25 → 6 Punkte. Hämoglobin (g/dl) Männer: ≥ 13 → 0, 12–12,9 → 1, 10–11,9 → 3, < 10 → 6; Frauen: ≥ 12 → 0, 10–11,9 → 1, < 10 → 6. Systolischer Blutdruck: ≥ 110 → 0, 100–109 → 1, 90–99 → 2, < 90 → 3 Punkte.',
+        'In einer großen internationalen Vergleichsstudie sagte ein Wert ≥ 7 die Notwendigkeit einer Intervention am besten voraus.',
+      ],
+      sources: [
+        { label: 'Blatchford O et al. A risk score to predict need for treatment for upper-gastrointestinal haemorrhage. Lancet 2000;356(9238):1318–1321', url: 'https://doi.org/10.1016/S0140-6736(00)02816-6' },
+        { label: 'Stanley AJ et al. Comparison of risk scoring systems for patients presenting with upper gastrointestinal bleeding: international multicentre prospective study. BMJ 2017;356:i6432', url: 'https://doi.org/10.1136/bmj.i6432' },
+        { label: 'Gralnek IM et al. Endoscopic diagnosis and management of nonvariceal upper gastrointestinal hemorrhage (NVUGIH): ESGE Guideline – Update 2021. Endoscopy 2021;53(3):300–332', url: 'https://doi.org/10.1055/a-1369-5274' },
+      ],
+    },
+
+    {
       id: 'child-pugh',
-      group: 'Leber',
+      group: 'Gastro & Leber',
       short: 'Child-Pugh',
       title: 'Child-Pugh-Score',
       subtitle: 'Leberzirrhose: Schweregrad der Leberfunktionsstörung (5–15 Punkte)',
@@ -1045,7 +1303,7 @@
 
     {
       id: 'meld',
-      group: 'Leber',
+      group: 'Gastro & Leber',
       short: 'MELD',
       title: 'MELD-Score',
       subtitle: 'Model for End-Stage Liver Disease: 3-Monats-Letalität bei fortgeschrittener Lebererkrankung (6–40)',
@@ -1343,7 +1601,7 @@
       title: 'Natrium-Korrektur',
       subtitle: 'Hypo- und Hypernatriämie: erwartete Änderung des Serum-Natriums pro Liter Infusion (Adrogué-Madias)',
       keywords: 'Natrium Hyponatriämie Hypernatriämie Adrogue Madias NaCl 3 % hyperton Korrektur ODS pontine Myelinolyse',
-      unit: 'mmol/l pro Liter',
+      unit: 'mmol/l',
       usage: {
         when: 'Hypo- oder Hypernatriämie: abschätzen, wie stark 1 Liter einer Infusionslösung das Serum-Natrium ändert, und die Infusionsmenge für eine angestrebte Änderung planen.',
         not: 'Laufende Verluste und Zufuhren (Urin, Drainagen, Trinkmenge) gehen nicht ein; bei einsetzender Wasserdiurese steigt das Natrium schneller als berechnet. Natrium deshalb engmaschig kontrollieren (anfangs alle 2–4 Stunden). Ersetzt nicht die Ursachenabklärung.',
@@ -1382,18 +1640,19 @@
           const ml = a.target / Math.abs(total) * 1000;
           rows.push({ name: `Menge für ${formatNumber(a.target, 1)} mmol/l`, value: `${formatNumber(Math.round(ml / 10) * 10, 0)} ml`, note: `${a.fluid.label}; Laufrate je nach Zeitraum festlegen`, level: 'info' });
         }
+        const base = { scoreName: 'ΔNa⁺ je Liter' };
         const delta = `Erwartete Änderung: ${total > 0 ? '+' : ''}${formatPoints(total)} mmol/l pro Liter ${a.fluid.label}.`;
         if (a.na < 135) {
           const wrong = total <= 0 ? ' Achtung: Diese Lösung senkt das Natrium bzw. hebt es nicht an.' : '';
           const level = a.na < 125 ? 'high' : 'mid';
-          return { level, rows, label: a.na < 125 ? 'Schwere Hyponatriämie' : 'Hyponatriämie', text: `${delta}${wrong} Korrekturgrenze: höchstens 10 mmol/l in den ersten 24 Stunden, danach höchstens 8 mmol/l pro 24 Stunden; bei hohem Risiko für ein osmotisches Demyelinisierungssyndrom (Alkoholkrankheit, Mangelernährung, Hypokaliämie, Lebererkrankung) vorsichtiger. Bei schweren Symptomen: 150 ml NaCl 3 % über 20 Minuten, bei Bedarf wiederholen.` };
+          return { ...base, level, rows, label: a.na < 125 ? 'Schwere Hyponatriämie' : 'Hyponatriämie', text: `${delta}${wrong} Korrekturgrenze: höchstens 10 mmol/l in den ersten 24 Stunden, danach höchstens 8 mmol/l pro 24 Stunden; bei hohem Risiko für ein osmotisches Demyelinisierungssyndrom (Alkoholkrankheit, Mangelernährung, Hypokaliämie, Lebererkrankung) vorsichtiger. Bei schweren Symptomen: 150 ml NaCl 3 % über 20 Minuten, bei Bedarf wiederholen.` };
         }
         if (a.na > 145) {
           const wrong = total >= 0 ? ' Achtung: Diese Lösung senkt das Natrium nicht.' : '';
           const level = a.na > 160 ? 'high' : 'mid';
-          return { level, rows, label: a.na > 160 ? 'Schwere Hypernatriämie' : 'Hypernatriämie', text: `${delta}${wrong} Bei chronischer Hypernatriämie (> 48 Stunden) höchstens etwa 10 mmol/l pro 24 Stunden senken, um ein Hirnödem zu vermeiden.` };
+          return { ...base, level, rows, label: a.na > 160 ? 'Schwere Hypernatriämie' : 'Hypernatriämie', text: `${delta}${wrong} Bei chronischer Hypernatriämie (> 48 Stunden) höchstens etwa 10 mmol/l pro 24 Stunden senken, um ein Hirnödem zu vermeiden.` };
         }
-        return { level: 'low', rows, label: 'Normonatriämie', text: delta };
+        return { ...base, level: 'low', rows, label: 'Normonatriämie', text: delta };
       },
       notes: [
         'Formel: Änderung = (Na Infusion + K Infusion − Na Serum) / (Körperwasser + 1).',
@@ -1423,15 +1682,13 @@
           pick('Laufrate aus Dosis', { key: 'rate' }),
           pick('Dosis aus Laufrate', { key: 'dose' }),
         ]),
-        choice('drug', 'Wirkstoff', [
-          pick('Noradrenalin', { maxDose: 1 }),
-          pick('Adrenalin', { maxDose: 1 }),
-          pick('Dobutamin', { maxDose: 20 }),
-          pick('Dopamin', { maxDose: 20 }),
-          pick('Anderer Wirkstoff'),
-        ]),
-        num('mg', 'Wirkstoffmenge in der Spritze', [unit('mg', 1, 2)], 0.01, 2000),
-        num('ml', 'Gesamtvolumen der Spritze', [unit('ml', 1, 0)], 1, 100, { hint: 'nach Verdünnung, z. B. 50 ml' }),
+        choice('syringe', 'Spritze', SYRINGES.map((x) => pick(`${x.drug} ${formatPoints(x.mg)} mg / ${formatPoints(x.ml)} ml`, {
+          drug: x.drug, mg: x.mg, ml: x.ml, maxDose: x.maxDose,
+          hint: `${formatNumber((x.mg * 1000) / x.ml, 0)} µg/ml`,
+        })).concat(pick('Andere Spritze', { key: 'free', hint: 'Menge und Volumen selbst eingeben' })),
+        CONFIG.perfusor.confirmed ? 'Hausstandard' : 'Beispielliste – noch nicht an den Hausstandard angepasst'),
+        num('mg', 'Wirkstoffmenge in der Spritze', [unit('mg', 1, 2)], 0.01, 2000, { when: (v) => v.syringe === SYRINGES.length }),
+        num('ml', 'Gesamtvolumen der Spritze', [unit('ml', 1, 0)], 1, 100, { when: (v) => v.syringe === SYRINGES.length, hint: 'nach Verdünnung, z. B. 50 ml' }),
         num('weight', 'Körpergewicht', KG, 1, 300, SHARED('weight')),
         num('dose', 'Zieldosis', [unit('µg/kg/min', 1, 3)], 0.001, 100, { when: (v) => v.mode === 0 }),
         num('rate', 'Laufrate', [unit('ml/h', 1, 1)], 0.1, 200, { when: (v) => v.mode === 1 }),
@@ -1444,26 +1701,42 @@
       interpret(total, a) {
         const p = perfusor(a);
         const toRate = a.mode.key === 'rate';
+        const drug = a.syringe.drug || 'Freie Eingabe';
         const rows = [
-          { name: 'Konzentration', value: `${formatNumber(p.conc, p.conc < 10 ? 2 : 0)} µg/ml`, note: `${formatNumber(a.mg, 2)} mg in ${formatNumber(a.ml, 0)} ml`, level: 'info' },
+          { name: 'Konzentration', value: `${formatNumber(p.conc, p.conc < 10 ? 2 : 0)} µg/ml`, note: `${formatNumber(p.mg, 2)} mg in ${formatNumber(p.ml, 0)} ml`, level: 'info' },
           { name: 'Dosis', value: `${formatNumber(p.dose, 3)} µg/kg/min`, note: `${formatNumber(p.dose * a.weight, 1)} µg/min bei ${formatNumber(a.weight, 1)} kg`, level: 'info' },
           { name: 'Laufrate', value: `${formatNumber(p.rate, 1)} ml/h`, note: `${formatNumber(p.rate * p.conc / 1000, 2)} mg/h`, level: 'info' },
-          { name: 'Spritze reicht', value: `${formatNumber(a.ml / p.rate, 1)} h`, note: 'bei gleichbleibender Laufrate', level: 'info' },
+          { name: 'Spritze reicht', value: `${formatNumber(p.ml / p.rate, 1)} h`, note: 'bei gleichbleibender Laufrate', level: 'info' },
         ];
-        const high = a.drug.maxDose !== undefined && p.dose > a.drug.maxDose;
-        const warn = high ? ` Achtung: Die Dosis liegt über ${formatPoints(a.drug.maxDose)} µg/kg/min und damit außerhalb des üblichen Bereichs für ${a.drug.label} – Eingaben prüfen.` : '';
+        const high = a.syringe.maxDose !== undefined && p.dose > a.syringe.maxDose;
+        const warn = high ? ` Achtung: Die Dosis liegt über ${formatPoints(a.syringe.maxDose)} µg/kg/min und damit außerhalb des üblichen Bereichs für ${drug} – Eingaben prüfen.` : '';
+        const preset = a.syringe.key !== 'free' && !CONFIG.perfusor.confirmed
+          ? ' Hinweis: Die Spritzenliste ist eine Beispielliste und noch nicht an den Hausstandard angepasst.'
+          : '';
         return {
           scoreName: toRate ? 'Laufrate' : 'Dosis',
           unit: toRate ? 'ml/h' : 'µg/kg/min',
           level: high ? 'high' : 'info',
-          label: a.drug.label,
+          label: drug,
           rows,
-          text: `Laufrate = Dosis × Gewicht × 60 ÷ Konzentration.${warn} Vor Anwendung mit dem lokalen Perfusorstandard abgleichen und im Vier-Augen-Prinzip prüfen.`,
+          text: `Laufrate = Dosis × Gewicht × 60 ÷ Konzentration.${warn}${preset} Vor Anwendung mit dem lokalen Perfusorstandard abgleichen und im Vier-Augen-Prinzip prüfen.`,
         };
       },
       sources: [],
     },
   ];
+
+  // Urea in mmol/l: Harnstoff mg/dl ÷ 6,006
+  function gbsParts(a) {
+    const u = a.urea / 6.006;
+    const urea = u < 6.5 ? 0 : u < 8 ? 2 : u < 10 ? 3 : u < 25 ? 4 : 6;
+    const hb = a.sex.key === 'm'
+      ? (a.hb >= 13 ? 0 : a.hb >= 12 ? 1 : a.hb >= 10 ? 3 : 6)
+      : (a.hb >= 12 ? 0 : a.hb >= 10 ? 1 : 6);
+    const sbp = a.sbp >= 110 ? 0 : a.sbp >= 100 ? 1 : a.sbp >= 90 ? 2 : 3;
+    const other = (a.hr ? 1 : 0) + (a.melena ? 1 : 0) + (a.syncope ? 2 : 0) + (a.liver ? 2 : 0) + (a.chf ? 2 : 0);
+    return { urea, hb, sbp, other };
+  }
 
   function news2Parts(a) {
     const onO2 = a.o2.key === 'o2';
@@ -1494,9 +1767,12 @@
 
   // conc in µg/ml, dose in µg/kg/min, rate in ml/h
   function perfusor(a) {
-    const conc = (a.mg * 1000) / a.ml;
-    if (a.mode.key === 'rate') return { conc, dose: a.dose, rate: (a.dose * a.weight * 60) / conc };
-    return { conc, rate: a.rate, dose: (a.rate * conc) / (a.weight * 60) };
+    const free = a.syringe.key === 'free';
+    const mg = free ? a.mg : a.syringe.mg;
+    const ml = free ? a.ml : a.syringe.ml;
+    const conc = (mg * 1000) / ml;
+    if (a.mode.key === 'rate') return { mg, ml, conc, dose: a.dose, rate: (a.dose * a.weight * 60) / conc };
+    return { mg, ml, conc, rate: a.rate, dose: (a.rate * conc) / (a.weight * 60) };
   }
 
   function sofaParts(a) {

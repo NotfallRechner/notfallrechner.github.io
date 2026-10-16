@@ -1,12 +1,16 @@
 // Offline support. Network first, so updated scores arrive immediately when
 // online; the cache answers when the network is down or slower than 3 s.
-const CACHE = 'notfallrechner-v2';
+const CACHE = 'notfallrechner-v3';
 const ASSETS = [
   './',
   'index.html',
+  'pruefung.html',
   'css/style.css',
   'js/version.js',
+  'js/config.js',
   'js/scores.js',
+  'js/examples.js',
+  'js/review.js',
   'js/app.js',
   'manifest.json',
   'icons/icon.svg',

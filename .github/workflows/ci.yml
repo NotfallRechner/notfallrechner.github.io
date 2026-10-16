@@ -18,9 +18,11 @@ jobs:
         with:
           node-version: 22
       - name: Syntax prüfen
-        run: node --check js/app.js && node --check sw.js && node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
+        run: for f in js/*.js sw.js tests/*.js; do node --check "$f" || exit 1; done && node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
       - name: Tests
         run: node tests/scores.test.js
+      - name: Browsertest
+        run: node tests/ui.test.js
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -39,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - name: Seite zusammenstellen
-        run: mkdir _site && cp -r index.html manifest.json sw.js css js icons _site/
+        run: mkdir _site && cp -r index.html pruefung.html manifest.json sw.js css js icons _site/
       - uses: actions/upload-pages-artifact@v3
       - id: deployment
         uses: actions/deploy-pages@v4

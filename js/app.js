@@ -106,6 +106,7 @@
   function boolRow(item, values) {
     const btn = el('button', 'row');
     btn.type = 'button';
+    btn.dataset.id = item.id;
     btn.setAttribute('aria-pressed', String(!!values[item.id]));
     const text = el('span', 'row-text');
     text.appendChild(el('span', 'row-label', item.label));
@@ -411,11 +412,13 @@
       p.dataset.state = 'open';
       p.append('Fachliche Prüfung ausstehend. ');
     }
+    const details = el('a', null, 'Prüfdetails');
+    details.href = 'pruefung.html#r-' + score.id;
     const a = el('a', null, 'Fehler melden');
     a.href = issueUrl(score);
     a.target = '_blank';
     a.rel = 'noopener';
-    p.appendChild(a);
+    p.append(details, ' · ', a);
     return p;
   }
 
@@ -656,6 +659,19 @@
   // --- Wiring ---------------------------------------------------------------
 
   favBtn.addEventListener('click', () => toggleFav(score.id));
+
+  const textSize = $('text-size');
+  function applyTextSize(large) {
+    document.documentElement.classList.toggle('large-text', large);
+    textSize.setAttribute('aria-pressed', String(large));
+    textSize.textContent = large ? 'Normale Schrift' : 'Größere Schrift';
+  }
+  applyTextSize(store.get('largeText', false) === true);
+  textSize.addEventListener('click', () => {
+    const large = !document.documentElement.classList.contains('large-text');
+    store.set('largeText', large);
+    applyTextSize(large);
+  });
 
   usage.open = store.get('usageOpen', true) !== false;
   usage.addEventListener('toggle', () => store.set('usageOpen', usage.open));

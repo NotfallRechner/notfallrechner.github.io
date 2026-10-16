@@ -342,7 +342,7 @@ test('version file is valid and the service worker caches it', () => {
   assert.match(VERSION.number, /^\d+\.\d+\.\d+$/);
   assert.match(VERSION.date, /^\d{4}-\d{2}-\d{2}$/);
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  ['js/version.js', 'js/scores.js', 'js/app.js', 'css/style.css', 'index.html'].forEach((f) => assert.ok(sw.includes(`'${f}'`), f));
+  ['js/version.js', 'js/config.js', 'js/scores.js', 'js/examples.js', 'js/review.js', 'js/app.js', 'css/style.css', 'index.html', 'pruefung.html'].forEach((f) => assert.ok(sw.includes(`'${f}'`), f));
   // The update check in app.js reads the version with this pattern.
   const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'version.js'), 'utf8');
   assert.equal(/number:\s*'([^']+)'/.exec(src)[1], VERSION.number);
@@ -456,23 +456,67 @@ test('Sodium correction (Adrogué-Madias)', () => {
 
 test('Perfusor: rate from dose and dose from rate', () => {
   const s = byId.perfusor;
+  const syringes = s.items.find((i) => i.id === 'syringe').options;
+  const NA5 = syringes.findIndex((o) => o.drug === 'Noradrenalin' && o.mg === 5 && o.ml === 50);
+  const FREE = syringes.findIndex((o) => o.key === 'free');
+  assert.ok(NA5 >= 0 && FREE === syringes.length - 1);
   // 5 mg / 50 ml = 100 µg/ml; 0,1 µg/kg/min × 70 kg × 60 / 100 = 4,2 ml/h
-  const toRate = evaluate(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 0.1 });
+  const toRate = evaluate(s, { mode: 0, syringe: NA5, weight: 70, dose: 0.1 });
   assert.equal(toRate.total, 4.2);
   assert.equal(toRate.unit, 'ml/h');
   assert.equal(toRate.name, 'Laufrate');
   assert.equal(toRate.result.label, 'Noradrenalin');
-  const toDose = evaluate(s, { mode: 1, drug: 0, mg: 5, ml: 50, weight: 70, rate: 4.2 });
+  const toDose = evaluate(s, { mode: 1, syringe: NA5, weight: 70, rate: 4.2 });
   assert.equal(toDose.total, 0.1);
   assert.equal(toDose.unit, 'µg/kg/min');
-  // The input for the other direction is ignored and not required
-  assert.deepEqual(evaluate(s, { mode: 1, drug: 0, mg: 5, ml: 50, weight: 70 }).missing.map((i) => i.id), ['rate']);
-  const high = evaluate(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 2 });
+  // Inputs for the other direction and for free entry are ignored and not required
+  assert.deepEqual(evaluate(s, { mode: 1, syringe: NA5, weight: 70 }).missing.map((i) => i.id), ['rate']);
+  assert.deepEqual(evaluate(s, { mode: 0, syringe: FREE, weight: 70, dose: 5 }).missing.map((i) => i.id), ['mg', 'ml']);
+  // Free entry: 250 mg / 50 ml = 5000 µg/ml; 5 × 70 × 60 / 5000 = 4,2 ml/h
+  const free = evaluate(s, { mode: 0, syringe: FREE, mg: 250, ml: 50, weight: 70, dose: 5 });
+  assert.equal(free.total, 4.2);
+  assert.equal(free.result.label, 'Freie Eingabe');
+  const high = evaluate(s, { mode: 0, syringe: NA5, weight: 70, dose: 2 });
   assert.equal(high.result.level, 'high');
   assert.match(high.result.text, /außerhalb des üblichen Bereichs/);
-  const text = summaryText(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 0.1, rate: 99 });
+  assert.match(toRate.result.text, /Beispielliste/);
+  const text = summaryText(s, { mode: 0, syringe: NA5, weight: 70, dose: 0.1, rate: 99, mg: 1 });
   assert.match(text, /^Laufrate: 4,2 ml\/h – Noradrenalin\n/);
-  assert.doesNotMatch(text, /Laufrate: 99/);
+  assert.match(text, /Spritze: Noradrenalin 5 mg \/ 50 ml/);
+  assert.doesNotMatch(text, /Laufrate: 99|Wirkstoffmenge/);
+});
+
+test('worked examples (review page) match the calculators', () => {
+  const { EXAMPLES, resolveExample } = require('../js/examples.js');
+  SCORES.forEach((s) => {
+    const list = EXAMPLES[s.id];
+    assert.ok(list && list.length >= 2, `${s.id}: at least two examples`);
+    list.forEach((ex, n) => {
+      const where = `${s.id} example ${n + 1}`;
+      const r = evaluate(s, resolveExample(s, ex.values));
+      assert.ok(r.complete, `${where}: incomplete (${r.missing.map((i) => i.id).join(', ')})`);
+      if (ex.expect.total !== undefined) assert.equal(r.total, ex.expect.total, `${where}: total`);
+      assert.equal(r.result.label, ex.expect.label, `${where}: label`);
+      if (ex.expect.level) assert.equal(r.result.level, ex.expect.level, `${where}: level`);
+      if (ex.expect.name) assert.equal(r.name, ex.expect.name, `${where}: name`);
+    });
+  });
+  assert.deepEqual(Object.keys(EXAMPLES).filter((id) => !byId[id]), []);
+});
+
+test('new calculators: Blatchford, Ottawa, 4AT, PBW, syncope', () => {
+  // Blatchford: female Hb thresholds differ from male ones
+  assert.equal(evaluate(byId.gbs, { urea: 30, sex: 1, hb: 11, sbp: 120 }).total, 1);
+  assert.equal(evaluate(byId.gbs, { urea: 30, sex: 0, hb: 11, sbp: 120 }).total, 3);
+  // Urea entered in mmol/l is converted: 25 mmol/l → 6 points
+  assert.equal(evaluate(byId.gbs, { urea: 25 * 6.006, sex: 0, hb: 14, sbp: 120 }).total, 6);
+  assert.equal(byId.gbs.group, 'Gastro & Leber');
+  // Ottawa ankle: rule only applies with pain in the zones
+  assert.equal(evaluate(byId['ottawa-ankle'], { lat: true }).result.label, 'Regel nicht anwendbar');
+  assert.equal(evaluate(byId['ottawa-ankle'], { mall: true, mid: true, nwb: true }).result.label, 'Röntgen Sprunggelenk und Fuß');
+  assert.equal(byId['4at'].max, 12);
+  assert.equal(byId.syncope.max, 11);
+  assert.deepEqual(evaluate(byId.pbw, { height: 180, sex: 0 }).result.rows.map((r) => r.value), ['450 ml', '300 ml', '600 ml']);
 });
 
 console.log(`\n${passed} tests passed`);
