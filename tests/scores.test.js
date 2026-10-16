@@ -1,6 +1,6 @@
 // Run with: node tests/scores.test.js
 const assert = require('node:assert/strict');
-const { SCORES, evaluate, formatPoints } = require('../js/scores.js');
+const { SCORES, GROUPS, evaluate, formatPoints, summaryText } = require('../js/scores.js');
 
 const byId = Object.fromEntries(SCORES.map((s) => [s.id, s]));
 let passed = 0;
@@ -93,6 +93,166 @@ test('NIHSS sums all 15 items, UN counts as 0 and is reported', () => {
 test('German number format', () => {
   assert.equal(formatPoints(4.5), '4,5');
   assert.equal(formatPoints(-2), '−2');
+});
+
+test('every score has group, usage, sources and unique id', () => {
+  assert.equal(new Set(SCORES.map((s) => s.id)).size, SCORES.length);
+  SCORES.forEach((s) => {
+    assert.ok(GROUPS.includes(s.group), s.id + ' group');
+    assert.ok(s.usage && s.usage.when.length > 40, s.id + ' usage');
+    assert.ok(s.sources.length > 0, s.id + ' sources');
+  });
+});
+
+test('new maxima', () => {
+  assert.equal(byId.gcs.max, 15);
+  assert.equal(byId.centor.max, 5);
+  assert.equal(byId.cha2ds2va.max, 8);
+  assert.equal(byId.hasbled.max, 9);
+  assert.equal(byId.perc.max, 8);
+  assert.equal(byId.abcd2.max, 7);
+  assert.equal(byId['child-pugh'].max, 15);
+  assert.equal(byId.sofa.max, 24);
+  assert.equal(byId.meld.max, 40);
+  assert.equal(byId.egfr.max, null);
+});
+
+test('GCS bands and untestable verbal response', () => {
+  const s = byId.gcs;
+  assert.equal(evaluate(s, { e: 0, v: 0, m: 0 }).total, 15);
+  assert.equal(evaluate(s, { e: 0, v: 0, m: 0 }).result.level, 'low');
+  assert.equal(evaluate(s, { e: 3, v: 4, m: 5 }).total, 3);
+  const intubated = evaluate(s, { e: 1, v: 5, m: 1 });
+  assert.equal(intubated.total, 9);
+  assert.equal(intubated.untestable.length, 1);
+  assert.match(intubated.result.text, /V1 \(T\)/);
+  assert.equal(intubated.result.label, 'GCS 9T');
+  assert.doesNotMatch(intubated.result.text, /Atemwegssicherung/);
+  assert.equal(evaluate(s, { e: 2, v: 3, m: 3 }).result.level, 'high');
+});
+
+test('Centor/McIsaac age correction', () => {
+  const s = byId.centor;
+  const old = evaluate(s, { temp: true, age: 2 });
+  assert.equal(old.total, 0);
+  assert.equal(old.result.level, 'low');
+  assert.equal(evaluate(s, { temp: true, cough: true, lk: true, tons: true, age: 0 }).result.level, 'high');
+  assert.equal(evaluate(s, { temp: true, cough: true, age: 0 }).result.level, 'mid');
+});
+
+test('CHA2DS2-VA thresholds 0 / 1 / ≥ 2', () => {
+  const s = byId.cha2ds2va;
+  assert.equal(evaluate(s, { age: 0 }).result.level, 'low');
+  assert.equal(evaluate(s, { age: 1 }).result.level, 'mid');
+  assert.equal(evaluate(s, { age: 2 }).result.level, 'high');
+  assert.equal(evaluate(s, { age: 0, stroke: true }).total, 2);
+});
+
+test('HAS-BLED rates and bands', () => {
+  const s = byId.hasbled;
+  assert.match(evaluate(s, {}).result.text, /1,13/);
+  assert.equal(evaluate(s, { h: true, age: true }).result.level, 'mid');
+  const r = evaluate(s, { h: true, age: true, drugs: true });
+  assert.equal(r.result.level, 'high');
+  assert.match(r.result.text, /3,74/);
+  const all = Object.fromEntries(s.items.map((i) => [i.id, true]));
+  assert.match(evaluate(s, all).result.text, /keine ausreichenden Daten/);
+});
+
+test('PERC is only negative with zero criteria', () => {
+  assert.equal(evaluate(byId.perc, {}).result.label, 'PERC negativ');
+  assert.equal(evaluate(byId.perc, { hormone: true }).result.label, 'PERC positiv');
+});
+
+test('ABCD² bands', () => {
+  const s = byId.abcd2;
+  assert.equal(evaluate(s, { age: true, c: 2, d: 0 }).result.level, 'low');
+  assert.equal(evaluate(s, { age: true, bp: true, c: 2, d: 0 }).result.level, 'mid');
+  assert.equal(evaluate(s, { age: true, bp: true, dm: true, c: 2, d: 2 }).result.level, 'high');
+});
+
+test('Child-Pugh classes', () => {
+  const s = byId['child-pugh'];
+  const v = (bili, alb, inr, asc, he) => ({ bili, alb, inr, asc, he });
+  assert.equal(evaluate(s, v(0, 0, 0, 0, 0)).total, 5);
+  assert.equal(evaluate(s, v(0, 1, 0, 0, 0)).result.label, 'Child-Pugh A');
+  assert.equal(evaluate(s, v(1, 1, 0, 0, 0)).result.label, 'Child-Pugh B');
+  assert.equal(evaluate(s, v(2, 2, 1, 1, 0)).result.label, 'Child-Pugh C');
+});
+
+test('number items: missing until entered, formula only when complete', () => {
+  const s = byId.egfr;
+  const partial = evaluate(s, { crea: 1 });
+  assert.equal(partial.complete, false);
+  assert.equal(partial.total, null);
+  assert.deepEqual(partial.missing.map((i) => i.id), ['age', 'sex']);
+});
+
+test('eGFR CKD-EPI 2021 reference values', () => {
+  const s = byId.egfr;
+  const male = evaluate(s, { crea: 1.0, age: 50, sex: 1 });
+  assert.equal(male.total, 92);
+  assert.equal(male.result.label, 'KDIGO G1');
+  const female = evaluate(s, { crea: 1.0, age: 50, sex: 0 });
+  assert.equal(female.total, 69);
+  assert.equal(evaluate(s, { crea: 2.5, age: 70, sex: 1 }).result.label, 'KDIGO G4');
+});
+
+test('MELD with floor, creatinine cap and dialysis', () => {
+  const s = byId.meld;
+  assert.equal(evaluate(s, { bili: 0.5, inr: 0.9, crea: 0.6 }).total, 6);
+  assert.equal(evaluate(s, { bili: 3, inr: 1.5, crea: 1.5 }).total, 19);
+  const capped = evaluate(s, { bili: 3, inr: 1.5, crea: 8 }).total;
+  assert.equal(capped, evaluate(s, { bili: 3, inr: 1.5, crea: 1, dial: true }).total);
+  assert.equal(evaluate(s, { bili: 40, inr: 6, crea: 4 }).total, 40);
+});
+
+test('SOFA organ points', () => {
+  const s = byId.sofa;
+  const healthy = { pao2: 95, fio2: 21, plt: 250, bili: 0.5, cv: 0, gcs: 0, crea: 0.8, uo: 0 };
+  assert.equal(evaluate(s, healthy).total, 0);
+  // P/F 150 without ventilation is capped at 2, with ventilation 3.
+  assert.equal(evaluate(s, Object.assign({}, healthy, { pao2: 60, fio2: 40 })).total, 2);
+  assert.equal(evaluate(s, Object.assign({}, healthy, { pao2: 60, fio2: 40, vent: true })).total, 3);
+  const sick = { pao2: 60, fio2: 80, vent: true, plt: 40, bili: 7, cv: 4, gcs: 2, crea: 2.2, uo: 2 };
+  // resp 4 + coag 3 + liver 3 + cv 4 + cns 2 + renal max(2, 4)
+  const r = evaluate(s, sick);
+  assert.equal(r.total, 20);
+  assert.equal(r.result.level, 'high');
+  assert.match(r.result.text, /Niere 4/);
+});
+
+test('Anion gap with albumin correction and delta ratio', () => {
+  const s = byId['anion-gap'];
+  const normal = evaluate(s, { na: 140, cl: 104, hco3: 24 });
+  assert.equal(normal.total, 12);
+  assert.equal(normal.result.level, 'low');
+  const hyperchloremic = evaluate(s, { na: 140, cl: 115, hco3: 15 });
+  assert.equal(hyperchloremic.result.level, 'mid');
+  assert.match(hyperchloremic.result.text, /hyperchloräm/);
+  const lactic = evaluate(s, { na: 140, cl: 100, hco3: 12 });
+  assert.equal(lactic.total, 28);
+  assert.equal(lactic.result.level, 'high');
+  assert.match(lactic.result.text, /Delta-Ratio 1,3/);
+  const corrected = evaluate(s, { na: 140, cl: 104, hco3: 24, alb: 2.4 });
+  assert.equal(corrected.total, 17);
+  assert.equal(corrected.name, 'AG korrigiert');
+});
+
+test('summary text for documentation', () => {
+  assert.equal(
+    summaryText(byId.qsofa, { af: true, sbp: true }),
+    'qSOFA: 2/3 Punkte – qSOFA positiv\nErfüllt: Atemfrequenz ≥ 22/min (+1), Systolischer Blutdruck ≤ 100 mmHg (+1)');
+  assert.equal(
+    summaryText(byId.perc, {}),
+    'PERC: 0/8 Punkte – PERC negativ\nErfüllt: keine Kriterien');
+  assert.equal(summaryText(byId.heart, { h: 1 }), null);
+  const egfr = summaryText(byId.egfr, { crea: 1.04, age: 50, sex: 1 });
+  assert.match(egfr, /^eGFR: \d+ ml\/min\/1,73 m² – KDIGO G\d/);
+  assert.match(egfr, /Serumkreatinin: 1,04 mg\/dl/);
+  assert.match(egfr, /Geschlecht: Männlich$/);
+  const meld = summaryText(byId.meld, { bili: 2, inr: 1.2, crea: 1, dial: false });
+  assert.match(meld, /Nierenersatztherapie: nein/);
 });
 
 console.log(`\n${passed} tests passed`);
