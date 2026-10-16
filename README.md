@@ -12,7 +12,7 @@ und Link zur Originalquelle.
 | Thrombose & Embolie | Wells LE, PERC, Wells TVT |
 | Neurologie | NIHSS, ABCD² |
 | Leber | Child-Pugh, MELD (labMELD) |
-| Niere & Labor | eGFR (CKD-EPI 2021), Anionenlücke |
+| Niere & Labor | eGFR (CKD-EPI 2021), Urin-Indizes (FENa, FEUrea u. a.), Anionenlücke |
 
 Reines HTML/CSS/JavaScript ohne Build-Schritt und ohne Abhängigkeiten.
 `index.html` direkt im Browser öffnen oder den Ordner auf einem beliebigen

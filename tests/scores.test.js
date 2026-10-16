@@ -239,6 +239,54 @@ test('Anion gap with albumin correction and delta ratio', () => {
   assert.equal(corrected.name, 'AG korrigiert');
 });
 
+test('Urine indices: prerenal pattern', () => {
+  const s = byId.urin;
+  // FENa = 10 × 2 / (140 × 100) × 100 = 0,14 %; U/P creatinine 50
+  const r = evaluate(s, { sna: 140, screa: 2, una: 10, ucrea: 100, uosm: 650 });
+  assert.equal(r.total, 0.14);
+  assert.equal(r.name, 'FENa');
+  assert.equal(r.result.label, 'Prärenales Muster');
+  assert.equal(r.result.level, 'low');
+  assert.deepEqual(r.result.rows.map((x) => x.name), ['FENa', 'U/P-Kreatinin', 'Urin-Natrium', 'Urin-Osmolalität']);
+  assert.ok(r.result.rows.every((x) => x.level === 'low'));
+  assert.match(r.result.text, /3 von 3 weiteren Indizes passen dazu\./);
+});
+
+test('Urine indices: renal pattern and grey zone', () => {
+  const s = byId.urin;
+  // FENa = 60 × 3 / (135 × 30) × 100 = 4,44 %; U/P 10
+  const renal = evaluate(s, { sna: 135, screa: 3, una: 60, ucrea: 30 });
+  assert.equal(renal.total, 4.44);
+  assert.equal(renal.result.label, 'Renales Muster');
+  const grey = evaluate(s, { sna: 140, screa: 2, una: 21, ucrea: 30 });
+  assert.equal(grey.result.label, 'Nicht eindeutig');
+  assert.match(grey.result.text, /FENa im Graubereich/);
+});
+
+test('Urine indices: diuretics switch to FEUrea', () => {
+  const s = byId.urin;
+  const base = { sna: 140, screa: 2, una: 80, ucrea: 100, diur: true };
+  const noUrea = evaluate(s, base);
+  assert.equal(noUrea.result.label, 'Nicht verwertbar');
+  assert.equal(noUrea.result.rows[0].level, 'pending');
+  // FEUrea = 500 × 2 / (100 × 100) × 100 = 10 %
+  const r = evaluate(s, Object.assign({ surea: 100, uurea: 500 }, base));
+  assert.equal(r.name, 'FEUrea');
+  assert.equal(r.total, 10);
+  assert.equal(r.result.label, 'Prärenales Muster');
+  assert.ok(r.result.rows.some((x) => x.name === 'BUN/Kreatinin'));
+});
+
+test('Urine anion gap', () => {
+  const s = byId.urin;
+  const row = (v) => evaluate(s, Object.assign({ sna: 140, screa: 1, ucrea: 100 }, v)).result.rows.find((x) => x.name === 'Urin-Anionenlücke');
+  assert.equal(row({ una: 30, uk: 40, ucl: 100 }).value, '−30 mmol/l');
+  assert.match(row({ una: 30, uk: 40, ucl: 100 }).note, /^negativ/);
+  assert.match(row({ una: 60, uk: 30, ucl: 60 }).note, /^positiv/);
+  assert.match(row({ una: 10, uk: 30, ucl: 20 }).note, /nicht verwertbar/);
+  assert.equal(row({ una: 30 }), undefined);
+});
+
 test('summary text for documentation', () => {
   assert.equal(
     summaryText(byId.qsofa, { af: true, sbp: true }),
@@ -253,6 +301,12 @@ test('summary text for documentation', () => {
   assert.match(egfr, /Geschlecht: Männlich$/);
   const meld = summaryText(byId.meld, { bili: 2, inr: 1.2, crea: 1, dial: false });
   assert.match(meld, /Nierenersatztherapie: nein/);
+  const urin = summaryText(byId.urin, { sna: 140, screa: 2, una: 10, ucrea: 100 }).split('\n');
+  assert.equal(urin[0], 'FENa: 0,14 % – Prärenales Muster');
+  assert.equal(urin[1], 'FENa: 0,14 % – prärenal');
+  assert.ok(urin.includes('Werte:'));
+  assert.ok(urin.includes('Urin-Kreatinin: 100 mg/dl'));
+  assert.ok(urin.includes('Diuretika in den letzten 24 Stunden: nein'));
 });
 
 console.log(`\n${passed} tests passed`);

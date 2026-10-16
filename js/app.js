@@ -308,6 +308,21 @@
     return b;
   }
 
+  // Per-index results for calculators that report several values at once.
+  function indexTable(rows) {
+    const list = el('ul', 'indices');
+    list.setAttribute('aria-label', 'Einzelergebnisse');
+    rows.forEach((row) => {
+      const li = el('li', 'index-row');
+      li.dataset.level = row.level;
+      const head = el('div', 'index-head');
+      head.append(el('span', 'index-name', row.name), el('span', 'index-value', row.value));
+      li.append(head, el('span', 'index-note', row.note));
+      list.appendChild(li);
+    });
+    return list;
+  }
+
   function update() {
     const r = evaluate(score, valuesById[score.id]);
     const level = r.complete ? r.result.level : 'pending';
@@ -346,6 +361,7 @@
       parts.push(el('p', 'detail-kicker', kicker));
       parts.push(el('h2', 'detail-label', r.result.label));
       parts.push(el('p', 'detail-text', r.result.text));
+      if (r.result.rows) parts.push(indexTable(r.result.rows));
       if (r.untestable.length) {
         parts.push(el('p', 'detail-warn', 'Nicht testbar: ' + r.untestable.map((i) => i.label).join(', ')));
       }

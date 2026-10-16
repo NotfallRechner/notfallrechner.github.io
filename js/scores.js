@@ -20,6 +20,9 @@
   const BILI = [unit('mg/dl', 1, 2), unit('µmol/l', 1 / 17.1, 0)];
   const ALB = [unit('g/dl', 1, 1), unit('g/l', 0.1, 0)];
   const MMOL = [unit('mmol/l', 1, 1)];
+  const UCREA = [unit('mg/dl', 1, 1), unit('µmol/l', 1 / 88.4, 0), unit('mmol/l', 1000 / 88.4, 2)];
+  // Canonical: urea (Harnstoff) in mg/dl; BUN × 2,14 = Harnstoff.
+  const UREA = [unit('mg/dl', 1, 0), unit('mmol/l', 6.006, 1), unit('BUN mg/dl', 2.14, 0)];
 
   const GROUPS = [
     'Notfall & Intensiv',
@@ -775,6 +778,69 @@
     },
 
     {
+      id: 'urin',
+      group: 'Niere & Labor',
+      short: 'Urin-Indizes',
+      title: 'Urin-Indizes',
+      subtitle: 'Akute Nierenschädigung: prärenal oder renal? FENa, FEUrea, U/P-Kreatinin, Urin-Natrium, Osmolalität und Urin-Anionenlücke',
+      keywords: 'FENa FEUrea fraktionelle Natriumexkretion Harnstoffexkretion akutes Nierenversagen ANV AKI prärenal ATN Tubulusnekrose Urin Osmolalität Urin-Anionenlücke RTA',
+      unit: '%',
+      usage: {
+        when: 'Akute Nierenschädigung (Kreatininanstieg, Oligurie): Unterscheidung zwischen prärenaler Ursache (Volumenmangel, verminderte Nierenperfusion) und intrarenaler Schädigung, vor allem akuter Tubulusnekrose. Urin und Serum möglichst zeitgleich abnehmen, am besten vor Volumen- oder Diuretikagabe. Die Urin-Anionenlücke (optional) hilft bei hyperchlorämer metabolischer Azidose.',
+        not: 'Unter Diuretika ist die FENa nicht verwertbar – dann FEUrea nutzen. Eingeschränkt bei vorbestehender chronischer Niereninsuffizienz, osmotischer Diurese (Glukosurie, Mannitol, Kontrastmittel) und Nebenniereninsuffizienz. Eine niedrige FENa kommt auch bei Kontrastmittelnephropathie, Rhabdomyolyse, Sepsis, Glomerulonephritis und früher Obstruktion vor. Eine postrenale Ursache sonographisch ausschließen.',
+      },
+      items: [
+        num('sna', 'Serum-Natrium', MMOL, 100, 200),
+        num('screa', 'Serum-Kreatinin', CREA, 0.1, 30),
+        num('surea', 'Serum-Harnstoff', UREA, 5, 600, { optional: true, hint: 'für FEUrea und BUN/Kreatinin' }),
+        num('una', 'Urin-Natrium', MMOL, 1, 400),
+        num('ucrea', 'Urin-Kreatinin', UCREA, 1, 1000),
+        num('uurea', 'Urin-Harnstoff', UREA, 50, 10000, { optional: true, hint: 'für FEUrea' }),
+        num('uosm', 'Urin-Osmolalität', [unit('mosm/kg', 1, 0)], 50, 1500, { optional: true }),
+        num('uk', 'Urin-Kalium', MMOL, 1, 300, { optional: true, hint: 'für die Urin-Anionenlücke' }),
+        num('ucl', 'Urin-Chlorid', MMOL, 1, 400, { optional: true, hint: 'für die Urin-Anionenlücke' }),
+        flag('diur', 'Diuretika in den letzten 24 Stunden', 'FENa und Urin-Natrium sind dann nicht verwertbar'),
+      ],
+      max: null,
+      compute(a) {
+        const u = urineIndices(a);
+        const v = u.primary.raw;
+        return v < 10 ? Math.round(v * 100) / 100 : round1(v);
+      },
+      interpret(total, a) {
+        const u = urineIndices(a);
+        const p = u.primary;
+        const others = u.rows.filter((r) => r !== p && r.vote);
+        const agree = others.filter((r) => r.cls === p.cls).length;
+        const against = others.filter((r) => r.cls !== p.cls && r.cls !== 'unclear').length;
+        const consensus = !p.vote || p.cls === 'unclear' || !others.length ? ''
+          : ` ${agree} von ${others.length} weiteren Indizes passen dazu${against ? `, ${against} sprechen dagegen – Befunde im klinischen Kontext gewichten` : ''}.`;
+        const base = { scoreName: p.name, rows: u.rows.map(({ name, value, note, level }) => ({ name, value, note, level })) };
+        if (!p.vote) {
+          return Object.assign(base, { level: 'mid', label: 'Nicht verwertbar', text: 'Unter Diuretika ist die FENa nicht aussagekräftig. Für eine Einordnung Serum- und Urin-Harnstoff eingeben (FEUrea).' });
+        }
+        if (p.cls === 'pre') {
+          return Object.assign(base, { level: 'low', label: 'Prärenales Muster', text: `Hinweis auf eine prärenale Ursache (Volumenmangel, verminderte Nierenperfusion, z. B. bei Herzinsuffizienz oder Leberzirrhose). Volumenstatus prüfen; eine Besserung nach Volumengabe stützt die Diagnose.${consensus}` });
+        }
+        if (p.cls === 'renal') {
+          return Object.assign(base, { level: 'high', label: 'Renales Muster', text: `Hinweis auf eine intrarenale Schädigung, am häufigsten akute Tubulusnekrose (ischämisch, septisch, toxisch). Urinsediment, Medikamente und Nephrotoxine prüfen.${consensus}` });
+        }
+        return Object.assign(base, { level: 'mid', label: 'Nicht eindeutig', text: `${p.name} im Graubereich. Weitere Indizes, Urinsediment, Verlauf und Sonographie heranziehen.${consensus}` });
+      },
+      notes: [
+        'FENa = (U-Na × S-Krea) / (S-Na × U-Krea) × 100. FEUrea = (U-Harnstoff × S-Krea) / (S-Harnstoff × U-Krea) × 100. Urin-Anionenlücke = U-Na + U-K − U-Cl.',
+        'Grenzwerte prärenal / renal: FENa < 1 % / > 2 %, FEUrea ≤ 35 % / > 50 %, U/P-Kreatinin > 40 / < 20, Urin-Natrium < 20 / > 40 mmol/l, Urin-Osmolalität > 500 / < 350 mosm/kg, BUN/Kreatinin > 20 / < 15.',
+        'Die Urin-Anionenlücke ist nur bei hyperchlorämer metabolischer Azidose und einem Urin-Natrium ≥ 20 mmol/l verwertbar; Ketonurie und Medikamente mit Anionen (z. B. Penicilline) verfälschen sie.',
+      ],
+      sources: [
+        { label: 'Espinel CH. The FENa test. Use in the differential diagnosis of acute renal failure. JAMA 1976;236(6):579–581', url: 'https://doi.org/10.1001/jama.1976.03270060029022' },
+        { label: 'Miller TR et al. Urinary diagnostic indices in acute renal failure: a prospective study. Ann Intern Med 1978;89(1):47–50', url: 'https://doi.org/10.7326/0003-4819-89-1-47' },
+        { label: 'Carvounis CP et al. Significance of the fractional excretion of urea in the differential diagnosis of acute renal failure. Kidney Int 2002;62(6):2223–2229', url: 'https://doi.org/10.1046/j.1523-1755.2002.00683.x' },
+        { label: 'Batlle DC et al. The use of the urinary anion gap in the diagnosis of hyperchloremic metabolic acidosis. N Engl J Med 1988;318(10):594–599', url: 'https://doi.org/10.1056/NEJM198803103181002' },
+      ],
+    },
+
+    {
       id: 'anion-gap',
       group: 'Niere & Labor',
       short: 'Anionenlücke',
@@ -835,6 +901,63 @@
     const liver = steps(a.bili, [1.2, 2, 6, 12]);
     const renal = Math.max(steps(a.crea, [1.2, 2, 3.5, 5]), a.uo.points);
     return { pf, resp, coag, liver, cv: a.cv.points, cns: a.gcs.points, renal };
+  }
+
+  // Rows for the urine index table. cls: 'pre' | 'renal' | 'unclear';
+  // vote: false when the index is not usable (e.g. under diuretics).
+  function urineIndices(a) {
+    const LEVEL = { pre: 'low', renal: 'high', unclear: 'mid' };
+    const NOTE = { pre: 'prärenal', renal: 'renal (z. B. ATN)', unclear: 'Graubereich' };
+    const rows = [];
+    const add = (name, value, text, cls, vote, note) => {
+      const row = { name, value: text, raw: value, cls, vote };
+      row.level = vote ? LEVEL[cls] : 'pending';
+      row.note = note || NOTE[cls];
+      rows.push(row);
+      return row;
+    };
+    const pct = (v) => `${formatNumber(v, v < 10 ? 2 : 1)} %`;
+    const band = (v, preIf, renalIf) => (preIf(v) ? 'pre' : renalIf(v) ? 'renal' : 'unclear');
+
+    const fena = (a.una * a.screa) / (a.sna * a.ucrea) * 100;
+    const fenaCls = band(fena, (v) => v < 1, (v) => v > 2);
+    const fenaRow = add('FENa', fena, pct(fena), fenaCls, !a.diur,
+      a.diur ? 'unter Diuretika nicht verwertbar' : null);
+
+    let feureaRow = null;
+    if (a.surea !== undefined && a.uurea !== undefined) {
+      const feurea = (a.uurea * a.screa) / (a.surea * a.ucrea) * 100;
+      feureaRow = add('FEUrea', feurea, pct(feurea), band(feurea, (v) => v <= 35, (v) => v > 50), true);
+    }
+
+    const up = a.ucrea / a.screa;
+    add('U/P-Kreatinin', up, formatNumber(up, 0), band(up, (v) => v > 40, (v) => v < 20), true);
+
+    add('Urin-Natrium', a.una, `${formatNumber(a.una, 0)} mmol/l`, band(a.una, (v) => v < 20, (v) => v > 40), !a.diur,
+      a.diur ? 'unter Diuretika nicht verwertbar' : null);
+
+    if (a.uosm !== undefined) {
+      add('Urin-Osmolalität', a.uosm, `${formatNumber(a.uosm, 0)} mosm/kg`, band(a.uosm, (v) => v > 500, (v) => v < 350), true);
+    }
+
+    if (a.surea !== undefined) {
+      const ratio = (a.surea / 2.14) / a.screa;
+      add('BUN/Kreatinin', ratio, formatNumber(ratio, 0), band(ratio, (v) => v > 20, (v) => v < 15), true);
+    }
+
+    if (a.uk !== undefined && a.ucl !== undefined) {
+      const uag = a.una + a.uk - a.ucl;
+      const note = a.una < 20 ? 'bei Urin-Natrium < 20 mmol/l nicht verwertbar'
+        : uag < 0 ? 'negativ: renale NH₄⁺-Ausscheidung erhalten – extrarenaler Bicarbonatverlust (z. B. Diarrhö) wahrscheinlich'
+        : uag > 0 ? 'positiv: verminderte renale NH₄⁺-Ausscheidung – renal-tubuläre Azidose (distal oder Typ 4) möglich'
+        : 'neutral: nicht eindeutig';
+      // Not part of the prerenal/renal vote; it answers a different question.
+      const row = add('Urin-Anionenlücke', uag, `${formatPoints(round1(uag))} mmol/l`, 'unclear', false, note);
+      row.level = a.una < 20 ? 'pending' : 'mid';
+    }
+
+    const primary = a.diur && feureaRow ? feureaRow : fenaRow;
+    return { rows, primary };
   }
 
   function anionGap(a) {
@@ -911,6 +1034,8 @@
       : r.max !== null ? `${formatPoints(r.total)}/${formatPoints(r.max)} Punkte`
       : `${formatPoints(r.total)} Punkte`;
     const lines = [`${r.name}: ${total} – ${r.result.label}`];
+    (r.result.rows || []).forEach((row) => lines.push(`${row.name}: ${row.value} – ${row.note}`));
+    if (r.result.rows) lines.push('Werte:');
     const met = [];
     let hasCriteria = false;
     score.items.forEach((item) => {
