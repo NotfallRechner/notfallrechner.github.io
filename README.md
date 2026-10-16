@@ -1,55 +1,69 @@
-# Klinische Scores
+# NotfallRechner
 
-Schnelle, mobilfreundliche Rechner für klinische Scores – mit Hinweisen, wann
-der Score anzuwenden ist, Interpretation, Kopierfunktion für die Dokumentation
-und Link zur Originalquelle.
+Klinische Scores und Rechner für Notaufnahme und Station – mobilfreundlich,
+offline nutzbar, mit Hinweisen, wann der Score anzuwenden ist, Interpretation,
+Kopierfunktion für die Dokumentation und Link zur Originalquelle.
 
-| Bereich | Scores |
+**App:** https://notfallrechner.github.io
+
+| Bereich | Rechner |
 | --- | --- |
-| Notfall & Intensiv | qSOFA, SOFA, Glasgow Coma Scale |
+| Notfall & Intensiv | qSOFA, SOFA, Glasgow Coma Scale, NEWS2, Schockindex |
+| Trauma | Canadian CT Head Rule, Canadian C-Spine Rule, NEXUS, Parkland-Formel |
 | Infektionen | CURB-65/CRB-65, Centor/McIsaac, Legionella-Score |
 | Kardiologie | HEART, CHA₂DS₂-VA (ESC 2024), HAS-BLED |
-| Thrombose & Embolie | Wells LE, PERC, Wells TVT |
+| Thrombose & Embolie | Wells LE (mit altersadjustiertem D-Dimer), PERC, Wells TVT |
 | Neurologie | NIHSS, ABCD² |
 | Leber | Child-Pugh, MELD (labMELD) |
-| Niere & Labor | eGFR (CKD-EPI 2021), Urin-Indizes (FENa, FEUrea u. a.), Anionenlücke |
+| Niere & Labor | eGFR (CKD-EPI 2021), Urin-Indizes (FENa, FEUrea u. a.), Anionenlücke, albuminkorrigiertes Calcium, osmotische Lücke, Natrium-Korrektur |
+| Medikamente & Infusion | Perfusor-Rechner (µg/kg/min ↔ ml/h) |
 
 Reines HTML/CSS/JavaScript ohne Build-Schritt und ohne Abhängigkeiten.
-`index.html` direkt im Browser öffnen oder den Ordner auf einem beliebigen
-statischen Hoster (z. B. GitHub Pages) ablegen.
 
 ## Funktionen
 
-- **Wann anwenden?** – zu jedem Score Indikation und Grenzen (einklappbar)
+- **Wann anwenden?** – zu jedem Rechner Indikation und Grenzen
 - **Für Dokumentation kopieren** – Ergebnis mit allen Angaben als Text
-- **Suche und Favoriten** – Suchfeld (Taste `/`) über Name, Organ und Diagnose; Favoriten stehen vorn in der Leiste
-- **Zahleneingaben mit Einheitenwahl** (z. B. Kreatinin in mg/dl oder µmol/l); die gewählte Einheit wird gemerkt
-- **Offline nutzbar** und als App installierbar (PWA). Der Service Worker läuft nur über `http(s)`, nicht beim Öffnen per `file://`.
+- **Werte werden übernommen** – Kreatinin, Natrium, Gewicht, Puls usw. einmal eingeben, in anderen Rechnern vorausgefüllt (gestrichelt markiert); „Neuer Patient“ löscht alles
+- **Passend dazu** – Links zum sinnvollen Folge-Rechner, z. B. Wells LE → PERC
+- **Suche und Favoriten** – Suche (Taste `/`); in der Leiste stehen nur Favoriten
+- **Fachlicher Prüfstand** je Rechner und **Fehler melden** (GitHub-Issue, vorausgefüllt)
+- **Offline nutzbar** und installierbar (PWA); geöffnete Apps melden neue Versionen
 
 Gespeichert werden nur Favoriten und Anzeigeeinstellungen im Browser, nie Patientenwerte.
 
 ## Aufbau
 
-- `js/scores.js` – Score-Definitionen (Items, Punkte bzw. Formel, Interpretation, Anwendungshinweise, Quellen) und Auswertung, ohne DOM
+- `js/version.js` – Versionsnummer und Datum; **bei jeder Veröffentlichung erhöhen**, damit geöffnete Apps den Hinweis „Neue Version“ zeigen
+- `js/scores.js` – Rechner-Definitionen und Auswertung, ohne DOM
 - `js/app.js` – Oberfläche
 - `css/style.css` – Gestaltung, helles und dunkles Farbschema
 - `sw.js`, `manifest.json`, `icons/` – Offline-Betrieb und App-Installation
-- `tests/scores.test.js` – Tests der Rechenlogik: `node tests/scores.test.js`
-- `tools/make-icons.js` – erzeugt die PNG-Icons neu: `node tools/make-icons.js`
+- `tests/scores.test.js` – Tests: `node tests/scores.test.js`
+- `tools/make-icons.js` – erzeugt die PNG-Icons neu
 
-Einen neuen Score fügt man als weiteres Objekt in `SCORES` in `js/scores.js` hinzu.
-Eingabetypen: `bool` (Ja/Nein mit Punkten), `choice` (Auswahl) und `number`
-(Zahl mit Einheiten und Plausibilitätsbereich). Punktsummen-Scores brauchen nur
-`interpret`; formelbasierte Scores zusätzlich `compute` und ein explizites `max`
-(oder `null`). Pflichtfelder sind `group`, `usage.when` und `sources`.
+### Einen Rechner hinzufügen
 
-Neue Dateien, die offline verfügbar sein sollen, in `ASSETS` in `sw.js` eintragen.
+Ein weiteres Objekt in `SCORES` in `js/scores.js`. Pflichtfelder: `id`, `group`,
+`short`, `title`, `subtitle`, `usage.when`, `items`, `interpret`, `sources`
+(leer nur bei reinen Rechenhilfen mit `calculator: true`).
+
+| Eingabe | Zweck |
+| --- | --- |
+| `bool(id, label, punkte, hinweis)` | Ja/Nein mit Punkten |
+| `flag(id, label, hinweis)` | Ja/Nein ohne Punkte, für Formeln und Regeln |
+| `choice(id, label, optionen, hinweis)` | Auswahl; Optionen mit `opt(punkte, …)` oder `pick(…)` |
+| `num(id, label, einheiten, min, max, extra)` | Zahl mit Einheitenwahl; `extra`: `optional`, `shared`, `when`, `hint` |
+| `heading(label)` | Zwischenüberschrift |
+
+Weitere Felder: `compute` (Formel statt Punktsumme), `max` (oder `null`),
+`unit`, `rule: true` (Ergebnis ohne Zahl), `related` (Folge-Rechner),
+`reviewed: { date: 'JJJJ-MM-TT', by: 'Name' }` nach fachlicher Prüfung.
 
 ## CI und Veröffentlichung
 
 `.github/workflows/ci.yml` führt bei jedem Push und Pull Request die Tests aus
-und veröffentlicht `main` anschließend auf GitHub Pages. Dafür einmalig im
-Repository unter *Settings → Pages → Source* „GitHub Actions“ wählen.
+und veröffentlicht `main` anschließend auf GitHub Pages.
 
 ## Hinweis
 

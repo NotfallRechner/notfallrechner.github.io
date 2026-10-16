@@ -1,10 +1,11 @@
 // Offline support. Network first, so updated scores arrive immediately when
 // online; the cache answers when the network is down or slower than 3 s.
-const CACHE = 'klinikscores-v1';
+const CACHE = 'notfallrechner-v2';
 const ASSETS = [
   './',
   'index.html',
   'css/style.css',
+  'js/version.js',
   'js/scores.js',
   'js/app.js',
   'manifest.json',

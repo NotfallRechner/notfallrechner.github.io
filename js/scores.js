@@ -15,6 +15,8 @@
   // converts an entry in that unit to the canonical one. min/max are canonical.
   const num = (id, label, units, min, max, extra) => Object.assign({ id, type: 'number', label, units, min, max }, extra);
   const unit = (label, factor, decimals) => ({ label, factor, decimals });
+  // Section title inside a form; carries no value.
+  const heading = (label) => ({ type: 'heading', label });
 
   const CREA = [unit('mg/dl', 1, 2), unit('µmol/l', 1 / 88.4, 0)];
   const BILI = [unit('mg/dl', 1, 2), unit('µmol/l', 1 / 17.1, 0)];
@@ -23,15 +25,28 @@
   const UCREA = [unit('mg/dl', 1, 1), unit('µmol/l', 1 / 88.4, 0), unit('mmol/l', 1000 / 88.4, 2)];
   // Canonical: urea (Harnstoff) in mg/dl; BUN × 2,14 = Harnstoff.
   const UREA = [unit('mg/dl', 1, 0), unit('mmol/l', 6.006, 1), unit('BUN mg/dl', 2.14, 0)];
+  const KG = [unit('kg', 1, 1)];
+  const YEARS = [unit('Jahre', 1, 0)];
+  const PER_MIN = [unit('/min', 1, 0)];
+  const MMHG = [unit('mmHg', 1, 0)];
+  const GLU = [unit('mg/dl', 1, 0), unit('mmol/l', 18.016, 1)];
+  const ETOH = [unit('mg/dl', 1, 0), unit('g/l', 100, 2), unit('mmol/l', 4.607, 1)];
+  const CA = [unit('mmol/l', 1, 2), unit('mg/dl', 0.2495, 1)];
+
+  // Inputs with the same `shared` key are filled in from one calculator to the
+  // next during a session; all of them must use the same canonical unit.
+  const SHARED = (key) => ({ shared: key });
 
   const GROUPS = [
     'Notfall & Intensiv',
+    'Trauma',
     'Infektionen',
     'Kardiologie',
     'Thrombose & Embolie',
     'Neurologie',
     'Leber',
     'Niere & Labor',
+    'Medikamente & Infusion',
   ];
 
   const SCORES = [
@@ -65,6 +80,10 @@
           text: 'Nach qSOFA kein erhöhtes Risiko. Eine Sepsis ist damit nicht ausgeschlossen – bei klinischem Verdacht weiter abklären.',
         };
       },
+      related: [
+        { id: 'sofa', text: 'Organdysfunktion mit dem SOFA-Score erfassen', when: (t) => t >= 2 },
+        { id: 'news2', text: 'Verlauf mit NEWS2 überwachen' },
+      ],
       sources: [
         { label: 'Seymour CW et al. Assessment of Clinical Criteria for Sepsis. JAMA 2016;315(8):762–774', url: 'https://doi.org/10.1001/jama.2016.0288' },
         { label: 'Singer M et al. Sepsis-3. JAMA 2016;315(8):801–810', url: 'https://doi.org/10.1001/jama.2016.0287' },
@@ -86,8 +105,8 @@
         num('pao2', 'PaO₂', [unit('mmHg', 1, 0), unit('kPa', 7.50062, 1)], 20, 700, { hint: 'arteriell, aus der Blutgasanalyse' }),
         num('fio2', 'FiO₂', [unit('%', 1, 0)], 21, 100, { hint: 'Raumluft = 21 %' }),
         flag('vent', 'Atemunterstützung', 'invasive oder nicht-invasive Beatmung – Voraussetzung für 3 oder 4 Punkte'),
-        num('plt', 'Thrombozyten', [unit('/nl', 1, 0)], 0, 2000, { hint: '/nl = 10³/µl' }),
-        num('bili', 'Bilirubin', BILI, 0, 70),
+        num('plt', 'Thrombozyten', [unit('/nl', 1, 0)], 0, 2000, { shared: 'plt', hint: '/nl = 10³/µl' }),
+        num('bili', 'Bilirubin', BILI, 0, 70, SHARED('bili')),
         choice('cv', 'Kreislauf', [
           opt(0, 'MAP ≥ 70 mmHg'),
           opt(1, 'MAP < 70 mmHg'),
@@ -102,7 +121,7 @@
           opt(3, '6–9'),
           opt(4, '< 6'),
         ], 'Bei Sedierung den angenommenen Wert ohne Sedierung'),
-        num('crea', 'Kreatinin', CREA, 0.1, 30),
+        num('crea', 'Kreatinin', CREA, 0.1, 30, SHARED('crea')),
         choice('uo', 'Urinausscheidung', [
           opt(0, '≥ 500 ml/Tag oder nicht bestimmt'),
           opt(3, '< 500 ml/Tag'),
@@ -183,9 +202,277 @@
       notes: [
         'Die Einzelkomponenten sind aussagekräftiger als die Summe; ein Abfall um ≥ 2 Punkte ist ein Warnzeichen.',
       ],
+      related: [
+        { id: 'ct-head', text: 'Leichtes SHT: Canadian CT Head Rule', when: (t) => t >= 13 },
+      ],
       sources: [
         { label: 'Teasdale G, Jennett B. Assessment of coma and impaired consciousness. A practical scale. Lancet 1974;2(7872):81–84', url: 'https://doi.org/10.1016/S0140-6736(74)91639-0' },
         { label: 'Teasdale G et al. The Glasgow Coma Scale at 40 years: standing the test of time. Lancet Neurol 2014;13(8):844–854', url: 'https://doi.org/10.1016/S1474-4422(14)70120-6' },
+      ],
+    },
+
+    {
+      id: 'news2',
+      group: 'Notfall & Intensiv',
+      short: 'NEWS2',
+      title: 'NEWS2',
+      subtitle: 'National Early Warning Score 2: klinische Verschlechterung früh erkennen (0–20 Punkte)',
+      keywords: 'Frühwarnscore Early Warning Vitalparameter Verschlechterung Sepsis Station MEWS',
+      usage: {
+        when: 'Erwachsene in Notaufnahme und auf Station: standardisierte Bewertung der Vitalparameter, um eine Verschlechterung früh zu erkennen und die Reaktion festzulegen – Überwachungsfrequenz, ärztliche Beurteilung, Intensivteam. Auch als Screening bei Infektverdacht.',
+        not: 'Nicht validiert für Kinder unter 16 Jahren und Schwangere (dort eigene Scores). Ersetzt nicht die klinische Einschätzung – bei Sorge um den Patienten auch bei niedrigem Wert eskalieren. SpO₂-Skala 2 nur bei ärztlich festgelegtem Zielbereich 88–92 %.',
+      },
+      items: [
+        num('af', 'Atemfrequenz', PER_MIN, 1, 80),
+        num('spo2', 'Sauerstoffsättigung (SpO₂)', [unit('%', 1, 0)], 50, 100),
+        flag('scale2', 'SpO₂-Skala 2 (Zielbereich 88–92 %)', 'nur bei ärztlich festgelegtem Ziel, z. B. hyperkapnische respiratorische Insuffizienz'),
+        choice('o2', 'Atemluft', [
+          opt(0, 'Raumluft', { key: 'air' }),
+          opt(2, 'Sauerstoffgabe', { key: 'o2', hint: 'jede Form, auch High-Flow oder NIV' }),
+        ]),
+        num('sbp', 'Systolischer Blutdruck', MMHG, 30, 300, SHARED('sbp')),
+        num('hr', 'Herzfrequenz', PER_MIN, 20, 250, SHARED('hr')),
+        choice('cns', 'Bewusstsein (ACVPU)', [
+          opt(0, 'Wach (A)'),
+          opt(3, 'Neu verwirrt oder nur auf Ansprache, Schmerz oder nicht reagierend', { hint: 'C, V, P oder U' }),
+        ]),
+        num('temp', 'Körpertemperatur', [unit('°C', 1, 1)], 25, 45),
+      ],
+      max: 20,
+      compute(a) {
+        const p = news2Parts(a);
+        return p.af + p.spo2 + p.o2 + p.sbp + p.hr + p.cns + p.temp;
+      },
+      interpret(total, a) {
+        const p = news2Parts(a);
+        const parts = `Atemfrequenz ${p.af} · SpO₂ ${p.spo2} · O₂ ${p.o2} · Blutdruck ${p.sbp} · Puls ${p.hr} · Bewusstsein ${p.cns} · Temperatur ${p.temp}.`;
+        if (total >= 7) return { level: 'high', label: 'Hohes Risiko', text: `${parts} Notfallreaktion: kontinuierliche Überwachung, sofortige Beurteilung durch ein Team mit intensivmedizinischer Kompetenz, Verlegung auf eine höhere Versorgungsstufe erwägen.` };
+        if (total >= 5) return { level: 'mid', label: 'Mittleres Risiko', text: `${parts} Dringliche Reaktion: Vitalparameter mindestens stündlich, zeitnahe Beurteilung durch einen in Akutmedizin erfahrenen Arzt; an Sepsis denken.` };
+        if (p.red) return { level: 'mid', label: 'Niedrig-mittleres Risiko', text: `${parts} Ein Einzelparameter mit 3 Punkten: Vitalparameter mindestens stündlich, dringende ärztliche Beurteilung auf Station.` };
+        if (total >= 1) return { level: 'low', label: 'Niedriges Risiko', text: `${parts} Vitalparameter mindestens alle 4–6 Stunden; Pflegekraft entscheidet über eine frühere Kontrolle oder Eskalation.` };
+        return { level: 'low', label: 'Kein Hinweis auf Verschlechterung', text: `${parts} Vitalparameter mindestens alle 12 Stunden.` };
+      },
+      notes: [
+        'SpO₂-Skala 1: ≥ 96 % 0, 94–95 % 1, 92–93 % 2, ≤ 91 % 3 Punkte. Skala 2: 88–92 % (oder ≥ 93 % unter Raumluft) 0 Punkte; unter Sauerstoff 93–94 % 1, 95–96 % 2, ≥ 97 % 3 Punkte; 86–87 % 1, 84–85 % 2, ≤ 83 % 3 Punkte.',
+        'Ein neu aufgetretener Verwirrtheitszustand zählt wie eine Bewusstseinsstörung (3 Punkte).',
+      ],
+      related: [
+        { id: 'qsofa', text: 'Bei Infektverdacht: qSOFA', when: (t) => t >= 5 },
+        { id: 'shock-index', text: 'Kreislauf mit dem Schockindex einschätzen' },
+      ],
+      sources: [
+        { label: 'Royal College of Physicians. National Early Warning Score (NEWS) 2: Standardising the assessment of acute-illness severity in the NHS. London: RCP, 2017', url: 'https://www.rcp.ac.uk/improving-care/resources/national-early-warning-score-news-2/' },
+        { label: 'Smith GB et al. The ability of the National Early Warning Score (NEWS) to discriminate patients at risk of early cardiac arrest, unanticipated intensive care unit admission, and death. Resuscitation 2013;84(4):465–470', url: 'https://doi.org/10.1016/j.resuscitation.2012.12.016' },
+      ],
+    },
+
+    {
+      id: 'shock-index',
+      group: 'Notfall & Intensiv',
+      short: 'Schockindex',
+      title: 'Schockindex',
+      subtitle: 'Herzfrequenz geteilt durch systolischen Blutdruck',
+      keywords: 'Shock Index Allgöwer Schock Blutung Volumenmangel Hypovolämie',
+      unit: '',
+      usage: {
+        when: 'Schnelle Einschätzung eines Volumenmangel- oder hämorrhagischen Schocks, z. B. bei Trauma, gastrointestinaler Blutung oder Sepsis – auch präklinisch, da nur Puls und Blutdruck nötig sind.',
+        not: 'Unzuverlässig unter Betablockern, bei Herzschrittmacher, Hypertonie, älteren Patienten und in der Schwangerschaft. Ein normaler Wert schließt einen Schock nicht aus; Verlauf und Klinik (Laktat, Rekapillarisierung, Bewusstsein) beachten.',
+      },
+      items: [
+        num('hr', 'Herzfrequenz', PER_MIN, 20, 250, SHARED('hr')),
+        num('sbp', 'Systolischer Blutdruck', MMHG, 30, 300, SHARED('sbp')),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round((a.hr / a.sbp) * 100) / 100;
+      },
+      interpret(total) {
+        if (total < 0.7) return { level: 'low', label: 'Normal', text: 'Normbereich etwa 0,5–0,7.' };
+        if (total < 1) return { level: 'mid', label: 'Erhöht', text: 'Hinweis auf eine beginnende Kreislaufbelastung; engmaschig kontrollieren.' };
+        return { level: 'high', label: 'Schock wahrscheinlich', text: 'Ein Schockindex ≥ 1 spricht für einen manifesten Schock, z. B. durch relevanten Blutverlust. Ursache suchen, Volumen- bzw. Blutproduktgabe vorbereiten.' };
+      },
+      related: [
+        { id: 'news2', text: 'Gesamtbild der Vitalparameter mit NEWS2' },
+      ],
+      sources: [
+        { label: 'Allgöwer M, Burri C. „Schockindex“. Dtsch Med Wochenschr 1967;92(43):1947–1950', url: 'https://doi.org/10.1055/s-0028-1106070' },
+      ],
+    },
+
+    {
+      id: 'ct-head',
+      group: 'Trauma',
+      short: 'CT Head',
+      title: 'Canadian CT Head Rule',
+      subtitle: 'Leichtes Schädel-Hirn-Trauma: Ist ein CT des Schädels nötig?',
+      keywords: 'Schädel-Hirn-Trauma SHT Kopfverletzung CCT cCT Bildgebung Commotio Gehirnerschütterung',
+      rule: true,
+      usage: {
+        when: 'Erwachsene ab 16 Jahren mit leichtem Schädel-Hirn-Trauma: GCS 13–15 und beobachtete Bewusstlosigkeit, eindeutige Amnesie oder beobachtete Desorientierung. Liegt keines der Kriterien vor, ist ein CT nach der Regel nicht erforderlich.',
+        not: 'Nicht anwendbar bei Antikoagulation oder Gerinnungsstörung, Krampfanfall nach dem Trauma, offensichtlicher offener Schädelverletzung, instabilen Vitalparametern, Schwangerschaft, fokal-neurologischem Defizit, Wiedervorstellung wegen desselben Traumas oder Alter unter 16 Jahren – dort großzügig CT.',
+      },
+      items: [
+        heading('Hohes Risiko (neurochirurgische Intervention)'),
+        flag('gcs2h', 'GCS < 15 zwei Stunden nach dem Trauma'),
+        flag('fx', 'Verdacht auf offene oder Impressionsfraktur des Schädels'),
+        flag('basal', 'Zeichen einer Schädelbasisfraktur', 'Hämatotympanon, Brillen- oder Monokelhämatom, Oto- oder Rhinoliquorrhö, Battle-Zeichen'),
+        flag('vomit', 'Erbrechen ≥ 2 ×'),
+        flag('age', 'Alter ≥ 65 Jahre'),
+        heading('Mittleres Risiko (relevanter Befund im CT)'),
+        flag('amnesia', 'Amnesie für ≥ 30 Minuten vor dem Aufprall'),
+        flag('mech', 'Gefährlicher Unfallmechanismus', 'Fußgänger von Fahrzeug erfasst, aus Fahrzeug geschleudert, Sturz aus > 1 m oder mehr als 5 Stufen'),
+      ],
+      max: null,
+      compute(a) {
+        return ['gcs2h', 'fx', 'basal', 'vomit', 'age', 'amnesia', 'mech'].filter((k) => a[k]).length;
+      },
+      interpret(total, a) {
+        if (a.gcs2h || a.fx || a.basal || a.vomit || a.age) return { level: 'high', label: 'CT indiziert', text: 'Hohes Risiko für eine neurochirurgisch relevante Verletzung. CT des Schädels.' };
+        if (a.amnesia || a.mech) return { level: 'mid', label: 'CT indiziert', text: 'Mittleres Risiko für einen relevanten Befund im CT. CT des Schädels.' };
+        return { level: 'low', label: 'Kein CT nach der Regel', text: 'Keines der Kriterien erfüllt – ein CT ist nach der Canadian CT Head Rule nicht erforderlich. Aufklärung über Warnzeichen und Wiedervorstellung.' };
+      },
+      notes: [
+        'In der Ableitungsstudie erkannten die Hochrisiko-Kriterien alle Patienten mit neurochirurgischer Intervention (Sensitivität 100 %).',
+      ],
+      related: [
+        { id: 'gcs', text: 'Bewusstseinslage mit der GCS dokumentieren' },
+        { id: 'c-spine', text: 'Begleitende HWS-Verletzung? Canadian C-Spine Rule' },
+      ],
+      sources: [
+        { label: 'Stiell IG et al. The Canadian CT Head Rule for patients with minor head injury. Lancet 2001;357(9266):1391–1396', url: 'https://doi.org/10.1016/S0140-6736(00)04561-X' },
+      ],
+    },
+
+    {
+      id: 'c-spine',
+      group: 'Trauma',
+      short: 'C-Spine',
+      title: 'Canadian C-Spine Rule',
+      subtitle: 'Halswirbelsäule nach Trauma: Ist eine Bildgebung nötig?',
+      keywords: 'HWS Halswirbelsäule Wirbelsäule Nacken Schleudertrauma Beschleunigungstrauma Bildgebung CT Röntgen',
+      rule: true,
+      usage: {
+        when: 'Wache (GCS 15), kreislaufstabile Erwachsene nach Trauma mit Nackenschmerzen oder möglicher HWS-Verletzung – entscheiden, ob eine Bildgebung der Halswirbelsäule nötig ist. Die drei Schritte nacheinander prüfen.',
+        not: 'Nicht anwendbar bei Alter unter 16 Jahren, GCS < 15, instabilen Vitalparametern, penetrierendem Trauma, akuter Lähmung, bekannter Wirbelsäulenerkrankung (Morbus Bechterew, rheumatoide Arthritis, Spinalkanalstenose), früherer HWS-Operation, Schwangerschaft oder Trauma vor mehr als 48 Stunden.',
+      },
+      items: [
+        heading('1 · Hochrisiko-Faktoren'),
+        flag('age', 'Alter ≥ 65 Jahre'),
+        flag('mech', 'Gefährlicher Unfallmechanismus', 'Sturz aus ≥ 1 m oder ≥ 5 Stufen, axiale Stauchung (z. B. Kopfsprung), Verkehrsunfall mit hoher Geschwindigkeit (> 100 km/h), Überschlag oder Herausschleudern, Unfall mit motorisiertem Freizeitfahrzeug, Fahrradkollision'),
+        flag('par', 'Parästhesien in den Extremitäten'),
+        heading('2 · Niedrigrisiko-Faktoren'),
+        flag('rear', 'Einfacher Auffahrunfall', 'nicht: in den Gegenverkehr geschoben, Zusammenstoß mit Bus oder Lkw, Überschlag, Aufprall mit hoher Geschwindigkeit'),
+        flag('sit', 'Sitzt in der Notaufnahme'),
+        flag('walk', 'War seit dem Unfall zu irgendeinem Zeitpunkt gehfähig'),
+        flag('delay', 'Nackenschmerz erst verzögert aufgetreten'),
+        flag('notender', 'Kein Druckschmerz über der HWS-Mittellinie'),
+        heading('3 · Bewegungsprüfung'),
+        flag('rot', 'Kann den Kopf aktiv 45° nach links und rechts drehen', 'nur prüfen, wenn kein Hochrisiko- und mindestens ein Niedrigrisiko-Faktor vorliegt'),
+      ],
+      max: null,
+      compute(a) {
+        return ['age', 'mech', 'par'].filter((k) => a[k]).length;
+      },
+      interpret(total, a) {
+        if (total > 0) return { level: 'high', label: 'Bildgebung empfohlen', text: 'Hochrisiko-Faktor vorhanden – Bildgebung der HWS, die Bewegung nicht prüfen.' };
+        if (!(a.rear || a.sit || a.walk || a.delay || a.notender)) return { level: 'high', label: 'Bildgebung empfohlen', text: 'Kein Niedrigrisiko-Faktor – die Beweglichkeit darf nicht geprüft werden. Bildgebung der HWS.' };
+        if (!a.rot) return { level: 'high', label: 'Bildgebung empfohlen', text: 'Aktive Rotation um 45° nach beiden Seiten nicht möglich (oder nicht geprüft). Bildgebung der HWS.' };
+        return { level: 'low', label: 'Keine Bildgebung nötig', text: 'Kein Hochrisiko-Faktor, mindestens ein Niedrigrisiko-Faktor und freie aktive Rotation – nach der Canadian C-Spine Rule ist keine Bildgebung erforderlich.' };
+      },
+      notes: [
+        'Bei Erwachsenen ist das CT in der Regel die Bildgebung der Wahl.',
+        'In der direkten Vergleichsstudie war die Canadian C-Spine Rule sensitiver als NEXUS (99,4 % gegenüber 90,7 %).',
+      ],
+      related: [
+        { id: 'nexus', text: 'Alternative: NEXUS-Kriterien' },
+      ],
+      sources: [
+        { label: 'Stiell IG et al. The Canadian C-spine rule for radiography in alert and stable trauma patients. JAMA 2001;286(15):1841–1848', url: 'https://doi.org/10.1001/jama.286.15.1841' },
+        { label: 'Stiell IG et al. The Canadian C-spine rule versus the NEXUS low-risk criteria in patients with trauma. N Engl J Med 2003;349(26):2510–2518', url: 'https://doi.org/10.1056/NEJMoa031375' },
+      ],
+    },
+
+    {
+      id: 'nexus',
+      group: 'Trauma',
+      short: 'NEXUS',
+      title: 'NEXUS-Kriterien',
+      subtitle: 'Halswirbelsäule nach Trauma: Bildgebung, wenn eines der fünf Kriterien vorliegt',
+      keywords: 'HWS Halswirbelsäule Wirbelsäule Nacken Bildgebung Röntgen CT National Emergency X-Radiography Utilization Study',
+      rule: true,
+      usage: {
+        when: 'Patienten nach stumpfem Trauma mit möglicher HWS-Verletzung. Ist keines der fünf Kriterien erfüllt, kann auf eine Bildgebung verzichtet werden. Auch bei Kindern und älteren Patienten untersucht.',
+        not: 'Bei Erwachsenen ist die Canadian C-Spine Rule sensitiver und spezifischer. Nicht bei penetrierendem Trauma. Eine Bewusstseinsstörung oder Intoxikation erlaubt keine verlässliche Untersuchung.',
+      },
+      items: [
+        flag('tender', 'Druckschmerz über der HWS-Mittellinie'),
+        flag('neuro', 'Fokal-neurologisches Defizit'),
+        flag('alert', 'Bewusstseinsstörung', 'GCS < 15, Desorientierung, verzögerte Reaktion, Amnesie'),
+        flag('intox', 'Hinweis auf Intoxikation'),
+        flag('distract', 'Ablenkende, schmerzhafte Begleitverletzung', 'z. B. Frakturen langer Röhrenknochen, große Wunden, Verbrennungen'),
+      ],
+      max: null,
+      compute(a) {
+        return ['tender', 'neuro', 'alert', 'intox', 'distract'].filter((k) => a[k]).length;
+      },
+      interpret(total) {
+        if (total > 0) return { level: 'high', label: 'Bildgebung empfohlen', text: 'Mindestens ein NEXUS-Kriterium erfüllt – Bildgebung der HWS.' };
+        return { level: 'low', label: 'Keine Bildgebung nötig', text: 'Keines der fünf Kriterien erfüllt – nach NEXUS ist keine Bildgebung erforderlich (Sensitivität in der Validierung 99,6 %).' };
+      },
+      related: [
+        { id: 'c-spine', text: 'Bei Erwachsenen: Canadian C-Spine Rule' },
+      ],
+      sources: [
+        { label: 'Hoffman JR et al. Validity of a set of clinical criteria to rule out injury to the cervical spine in patients with blunt trauma. N Engl J Med 2000;343(2):94–99', url: 'https://doi.org/10.1056/NEJM200007133430203' },
+      ],
+    },
+
+    {
+      id: 'parkland',
+      group: 'Trauma',
+      short: 'Parkland',
+      title: 'Parkland-Formel',
+      subtitle: 'Verbrennungen: Flüssigkeitsbedarf in den ersten 24 Stunden',
+      keywords: 'Verbrennung Verbrühung Baxter Infusion Ringer VKOF Neunerregel Brandverletzung',
+      unit: 'ml / 24 h',
+      usage: {
+        when: 'Erwachsene mit zweit- und drittgradigen Verbrennungen ab etwa 15–20 % VKOF: Startwert für die Infusion von Vollelektrolytlösung (z. B. Ringer-Laktat) in den ersten 24 Stunden, gerechnet ab dem Zeitpunkt der Verbrennung.',
+        not: 'Erstgradige Verbrennungen nicht mitzählen. Die Formel ist nur ein Startwert: Steuerung nach Urinausscheidung (Erwachsene 0,5 ml/kg/h) und Kreislauf. Überinfusion („fluid creep“) vermeiden – viele Zentren starten heute mit 2–4 ml/kg/% VKOF. Bei Kindern zusätzlich Erhaltungsbedarf und pädiatrische Formeln beachten.',
+      },
+      items: [
+        num('weight', 'Körpergewicht', KG, 1, 300, SHARED('weight')),
+        num('vkof', 'Verbrannte Körperoberfläche', [unit('% VKOF', 1, 0)], 1, 100, { hint: 'nur 2. und 3. Grad. Neunerregel: Kopf 9 %, je Arm 9 %, Rumpf vorn 18 %, hinten 18 %, je Bein 18 %, Genitale 1 %; Handfläche des Patienten mit Fingern ≈ 1 %' }),
+        num('hours', 'Zeit seit der Verbrennung', [unit('h', 1, 1)], 0, 24, { optional: true, hint: 'für die Laufrate, wenn die Infusion verspätet beginnt' }),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round(4 * a.weight * a.vkof);
+      },
+      interpret(total, a) {
+        const half = total / 2;
+        const ml = (v) => `${formatNumber(v, 0)} ml`;
+        const rate = (v) => `${formatNumber(v, 0)} ml/h`;
+        const rows = [];
+        if (a.hours !== undefined && a.hours < 8) {
+          rows.push({ name: `Bis Stunde 8 (noch ${formatNumber(8 - a.hours, 1)} h)`, value: rate(half / (8 - a.hours)), note: `${ml(half)}, falls bisher keine Infusion gelaufen ist`, level: 'info' });
+        } else {
+          rows.push({ name: 'Stunde 0–8', value: rate(half / 8), note: ml(half), level: 'info' });
+        }
+        rows.push({ name: 'Stunde 8–24', value: rate(half / 16), note: ml(half), level: 'info' });
+        rows.push({ name: 'Ziel-Urinausscheidung', value: rate(a.weight * 0.5), note: '0,5 ml/kg/h (Erwachsene)', level: 'info' });
+        const late = a.hours !== undefined && a.hours >= 8
+          ? ' Die ersten 8 Stunden sind bereits vorbei – bisher gegebene Mengen anrechnen und an Diurese und Kreislauf ausrichten.'
+          : '';
+        const level = a.vkof >= 40 ? 'high' : a.vkof >= 15 ? 'mid' : 'low';
+        const label = a.vkof >= 15 ? `${formatNumber(a.vkof, 0)} % VKOF` : 'Unter 15 % VKOF';
+        const hint = a.vkof < 15 ? 'Bei Erwachsenen ist unter etwa 15 % VKOF meist keine formelbasierte Infusion nötig. ' : '';
+        return { level, label, rows, text: `${hint}4 ml × ${formatNumber(a.weight, 1)} kg × ${formatNumber(a.vkof, 0)} % = ${ml(total)} in 24 Stunden; die Hälfte in den ersten 8 Stunden ab Verbrennung.${late} Verlegung in ein Zentrum für Schwerbrandverletzte prüfen.` };
+      },
+      notes: [
+        'Die modifizierte Brooke-Formel rechnet mit 2 ml/kg/% VKOF.',
+      ],
+      sources: [
+        { label: 'Baxter CR, Shires T. Physiological response to crystalloid resuscitation of severe burns. Ann N Y Acad Sci 1968;150(3):874–894', url: 'https://doi.org/10.1111/j.1749-6632.1968.tb14738.x' },
       ],
     },
 
@@ -224,6 +511,9 @@
       },
       notes: [
         'Die deutsche S3-Leitlinie verwendet CRB-65 (ohne Harnstoff), ergänzt um Oxygenierung, Komorbidität und Funktionsstatus.',
+      ],
+      related: [
+        { id: 'legionella', text: 'Legionellen-Wahrscheinlichkeit abschätzen' },
       ],
       sources: [
         { label: 'Lim WS et al. Defining community acquired pneumonia severity on presentation to hospital. Thorax 2003;58:377–382', url: 'https://doi.org/10.1136/thorax.58.5.377' },
@@ -296,6 +586,9 @@
       notes: [
         'Abgeleitet und validiert an Patienten mit ambulant erworbener Pneumonie in Schweizer Notaufnahmen.',
         'Der Urin-Antigentest erfasst nur Legionella pneumophila Serogruppe 1; ein negativer Test schließt andere Serogruppen nicht aus.',
+      ],
+      related: [
+        { id: 'curb65', text: 'Schweregrad der Pneumonie mit CURB-65' },
       ],
       sources: [
         { label: 'Fiumefreddo R et al. Clinical predictors for Legionella in patients presenting with community-acquired pneumonia to the emergency department. BMC Pulm Med 2009;9:4', url: 'https://doi.org/10.1186/1471-2466-9-4' },
@@ -384,6 +677,9 @@
         'Seit den ESC-Leitlinien 2024 zählt das weibliche Geschlecht nicht mehr (CHA₂DS₂-VASc → CHA₂DS₂-VA).',
         'Das Blutungsrisiko (z. B. HAS-BLED) dient dazu, beeinflussbare Risikofaktoren zu behandeln – nicht dazu, eine indizierte Antikoagulation zu unterlassen.',
       ],
+      related: [
+        { id: 'hasbled', text: 'Beeinflussbare Blutungsrisiken mit HAS-BLED erkennen', when: (t) => t >= 1 },
+      ],
       sources: [
         { label: 'Van Gelder IC et al. 2024 ESC Guidelines for the management of atrial fibrillation. Eur Heart J 2024;45(36):3314–3414', url: 'https://doi.org/10.1093/eurheartj/ehae176' },
       ],
@@ -420,6 +716,9 @@
         if (total === 2) return { level: 'mid', label: 'Mittleres Blutungsrisiko', text: `${rate} Beeinflussbare Risikofaktoren behandeln.` };
         return { level: 'high', label: 'Hohes Blutungsrisiko', text: `${rate} Beeinflussbare Risikofaktoren behandeln und engmaschiger kontrollieren – kein Grund, eine indizierte Antikoagulation zu unterlassen.` };
       },
+      related: [
+        { id: 'cha2ds2va', text: 'Schlaganfallrisiko mit CHA₂DS₂-VA' },
+      ],
       sources: [
         { label: 'Pisters R et al. A novel user-friendly score (HAS-BLED) to assess 1-year risk of major bleeding in patients with atrial fibrillation. Chest 2010;138(5):1093–1100', url: 'https://doi.org/10.1378/chest.10-0134' },
         { label: 'Van Gelder IC et al. 2024 ESC Guidelines for the management of atrial fibrillation. Eur Heart J 2024;45(36):3314–3414', url: 'https://doi.org/10.1093/eurheartj/ehae176' },
@@ -445,19 +744,31 @@
         bool('prev', 'Frühere TVT oder Lungenembolie', 1.5),
         bool('hemo', 'Hämoptyse', 1),
         bool('ca', 'Malignom', 1, 'aktive Therapie, Therapie in den letzten 6 Monaten oder palliativ'),
+        num('age', 'Alter', YEARS, 1, 120, { optional: true, shared: 'age', hint: 'für den altersadjustierten D-Dimer-Grenzwert' }),
       ],
-      interpret(total) {
+      interpret(total, a) {
         const tier = total < 2 ? 'niedrig' : total <= 6 ? 'mittel' : 'hoch';
         if (total <= 4) {
-          return { level: 'low', label: 'LE unwahrscheinlich', text: `D-Dimer bestimmen; ist es negativ, ist eine Lungenembolie weitgehend ausgeschlossen. Ist es positiv: CT-Pulmonalisangiographie. Dreistufig: Wahrscheinlichkeit ${tier}.` };
+          const age = a.age !== undefined ? Math.floor(a.age) : null;
+          const cutoff = age === null
+            ? 'Ab 50 Jahren altersadjustierten Grenzwert verwenden (Alter × 10 µg/l FEU).'
+            : age > 50
+              ? `Altersadjustierter D-Dimer-Grenzwert für ${age} Jahre: ${age * 10} µg/l FEU (statt 500).`
+              : 'D-Dimer-Grenzwert: 500 µg/l FEU.';
+          return { level: 'low', label: 'LE unwahrscheinlich', text: `D-Dimer bestimmen; liegt es unter dem Grenzwert, ist eine Lungenembolie weitgehend ausgeschlossen, sonst CT-Pulmonalisangiographie. ${cutoff} Dreistufig: Wahrscheinlichkeit ${tier}.` };
         }
         return { level: 'high', label: 'LE wahrscheinlich', text: `CT-Pulmonalisangiographie; D-Dimer ist hier nicht zum Ausschluss geeignet. Dreistufig: Wahrscheinlichkeit ${tier}.` };
       },
       notes: [
         'Zweistufig: ≤ 4 unwahrscheinlich, > 4 wahrscheinlich. Dreistufig: < 2 niedrig, 2–6 mittel, > 6 hoch.',
+        'Der altersadjustierte D-Dimer-Grenzwert (Alter × 10 µg/l FEU ab 50 Jahren) wurde für LE unwahrscheinlich bzw. nicht hoch validiert (ADJUST-PE). Einheiten und Referenzbereich des lokalen Tests beachten.',
+      ],
+      related: [
+        { id: 'perc', text: 'Bei klinisch niedriger Wahrscheinlichkeit zuerst PERC prüfen', when: (t) => t <= 4 },
       ],
       sources: [
-        { label: 'Wells PS et al. Derivation of a simple clinical model to categorize patients probability of pulmonary embolism. Thromb Haemost 2000;83(3):416–420', url: 'https://doi.org/10.1055/s-0037-1613830' },
+        { label: 'Wells PS et al. Derivation of a simple clinical model to categorize patients probability of pulmonary embolism: increasing the models utility with the SimpliRED D-dimer. Thromb Haemost 2000;83(3):416–420', url: 'https://doi.org/10.1055/s-0037-1613830' },
+        { label: 'Righini M et al. Age-adjusted D-dimer cutoff levels to rule out pulmonary embolism: the ADJUST-PE study. JAMA 2014;311(11):1117–1124', url: 'https://doi.org/10.1001/jama.2014.2135' },
       ],
     },
 
@@ -488,6 +799,9 @@
       },
       notes: [
         'Die Regel ist nur gültig, wenn alle acht Kriterien negativ sind; die Punktzahl selbst hat keine weitere Bedeutung.',
+      ],
+      related: [
+        { id: 'wells-le', text: 'Weiter mit dem Wells-Score Lungenembolie', when: (t) => t > 0 },
       ],
       sources: [
         { label: 'Kline JA et al. Clinical criteria to prevent unnecessary diagnostic testing in emergency department patients with suspected pulmonary embolism. J Thromb Haemost 2004;2(8):1247–1255', url: 'https://doi.org/10.1111/j.1538-7836.2004.00790.x' },
@@ -667,6 +981,9 @@
         if (total <= 5) return { level: 'mid', label: 'Mittleres Risiko', text: 'Schlaganfallrisiko in 2 Tagen in der Validierung 4,1 %. Abklärung ohne Verzögerung.' };
         return { level: 'high', label: 'Hohes Risiko', text: 'Schlaganfallrisiko in 2 Tagen in der Validierung 8,1 %. Sofortige Abklärung, möglichst auf einer Stroke Unit.' };
       },
+      related: [
+        { id: 'nihss', text: 'Bei anhaltenden Ausfällen: NIHSS' },
+      ],
       sources: [
         { label: 'Johnston SC et al. Validation and refinement of scores to predict very early stroke risk after transient ischaemic attack. Lancet 2007;369(9558):283–292', url: 'https://doi.org/10.1016/S0140-6736(07)60150-0' },
       ],
@@ -718,6 +1035,9 @@
       notes: [
         'Bei primär biliärer Cholangitis und primär sklerosierender Cholangitis gelten höhere Bilirubin-Grenzen (1–4 / 4–10 / > 10 mg/dl).',
       ],
+      related: [
+        { id: 'meld', text: 'Prognose mit dem MELD-Score' },
+      ],
       sources: [
         { label: 'Pugh RN et al. Transection of the oesophagus for bleeding oesophageal varices. Br J Surg 1973;60(8):646–649', url: 'https://doi.org/10.1002/bjs.1800600817' },
       ],
@@ -735,9 +1055,9 @@
         not: 'Unter Vitamin-K-Antagonisten ist der INR nicht verwertbar. Hyponatriämie verschlechtert die Prognose zusätzlich (MELD-Na); bei bestimmten Erkrankungen wie HCC bildet der labMELD die Dringlichkeit nicht ab (Standard-Exceptions).',
       },
       items: [
-        num('bili', 'Bilirubin', BILI, 0.1, 70),
+        num('bili', 'Bilirubin', BILI, 0.1, 70, SHARED('bili')),
         num('inr', 'INR', [], 0.5, 20),
-        num('crea', 'Kreatinin', CREA, 0.1, 30),
+        num('crea', 'Kreatinin', CREA, 0.1, 30, SHARED('crea')),
         flag('dial', 'Nierenersatztherapie', 'Dialyse ≥ 2 × in der letzten Woche oder CVVHD ≥ 24 h – Kreatinin wird dann mit 4 mg/dl gerechnet'),
       ],
       max: 40,
@@ -759,6 +1079,9 @@
         'Berechnet wird der ursprüngliche MELD (labMELD, wie bei Eurotransplant): 3,78 × ln(Bilirubin) + 11,2 × ln(INR) + 9,57 × ln(Kreatinin) + 6,43. Werte < 1 werden als 1 gerechnet, Kreatinin höchstens mit 4 mg/dl.',
         'MELD-Na und MELD 3.0 (USA) berücksichtigen zusätzlich Natrium, Albumin und Geschlecht und sind hier nicht umgesetzt.',
       ],
+      related: [
+        { id: 'child-pugh', text: 'Schweregrad mit Child-Pugh' },
+      ],
       sources: [
         { label: 'Kamath PS et al. A model to predict survival in patients with end-stage liver disease. Hepatology 2001;33(2):464–470', url: 'https://doi.org/10.1053/jhep.2001.22172' },
         { label: 'Wiesner R et al. Model for end-stage liver disease (MELD) and allocation of donor livers. Gastroenterology 2003;124(1):91–96', url: 'https://doi.org/10.1053/gast.2003.50016' },
@@ -778,8 +1101,8 @@
         not: 'Nicht bei akuter Nierenschädigung (Kreatinin nicht im Gleichgewicht), bei extremer Muskelmasse (Amputation, Kachexie, Bodybuilding, Querschnitt), in der Schwangerschaft und bei Kindern. Für die Dosierung bei sehr großer oder kleiner Körperoberfläche die absolute GFR (ml/min) berücksichtigen.',
       },
       items: [
-        num('crea', 'Serumkreatinin', CREA, 0.1, 30, { hint: 'enzymatisch bzw. IDMS-standardisiert' }),
-        num('age', 'Alter', [unit('Jahre', 1, 0)], 18, 120),
+        num('crea', 'Serumkreatinin', CREA, 0.1, 30, { shared: 'crea', hint: 'enzymatisch bzw. IDMS-standardisiert' }),
+        num('age', 'Alter', YEARS, 18, 120, SHARED('age')),
         choice('sex', 'Geschlecht', [
           pick('Weiblich', { key: 'f' }),
           pick('Männlich', { key: 'm' }),
@@ -806,6 +1129,9 @@
         'CKD-EPI 2021 ohne Ethnie-Faktor. Eine chronische Nierenkrankheit setzt eine Dauer von mehr als 3 Monaten voraus.',
         'Ist die Kreatinin-Schätzung fraglich, hilft die Kombination mit Cystatin C (CKD-EPI Kreatinin-Cystatin).',
       ],
+      related: [
+        { id: 'urin', text: 'Akute Nierenschädigung: Urin-Indizes' },
+      ],
       sources: [
         { label: 'Inker LA et al. New creatinine- and cystatin C-based equations to estimate GFR without race. N Engl J Med 2021;385:1737–1749', url: 'https://doi.org/10.1056/NEJMoa2102953' },
       ],
@@ -824,9 +1150,9 @@
         not: 'Unter Diuretika ist die FENa nicht verwertbar – dann FEUrea nutzen. Eingeschränkt bei vorbestehender chronischer Niereninsuffizienz, osmotischer Diurese (Glukosurie, Mannitol, Kontrastmittel) und Nebenniereninsuffizienz. Eine niedrige FENa kommt auch bei Kontrastmittelnephropathie, Rhabdomyolyse, Sepsis, Glomerulonephritis und früher Obstruktion vor. Eine postrenale Ursache sonographisch ausschließen.',
       },
       items: [
-        num('sna', 'Serum-Natrium', MMOL, 100, 200),
-        num('screa', 'Serum-Kreatinin', CREA, 0.1, 30),
-        num('surea', 'Serum-Harnstoff', UREA, 5, 600, { optional: true, hint: 'für FEUrea und BUN/Kreatinin' }),
+        num('sna', 'Serum-Natrium', MMOL, 100, 200, SHARED('na')),
+        num('screa', 'Serum-Kreatinin', CREA, 0.1, 30, SHARED('crea')),
+        num('surea', 'Serum-Harnstoff', UREA, 5, 600, { optional: true, shared: 'urea', hint: 'für FEUrea und BUN/Kreatinin' }),
         num('una', 'Urin-Natrium', MMOL, 1, 400),
         num('ucrea', 'Urin-Kreatinin', UCREA, 1, 1000),
         num('uurea', 'Urin-Harnstoff', UREA, 50, 10000, { optional: true, hint: 'für FEUrea' }),
@@ -866,6 +1192,9 @@
         'Grenzwerte prärenal / renal: FENa < 1 % / > 2 %, FEUrea ≤ 35 % / > 50 %, U/P-Kreatinin > 40 / < 20, Urin-Natrium < 20 / > 40 mmol/l, Urin-Osmolalität > 500 / < 350 mosm/kg, BUN/Kreatinin > 20 / < 15.',
         'Die Urin-Anionenlücke ist nur bei hyperchlorämer metabolischer Azidose und einem Urin-Natrium ≥ 20 mmol/l verwertbar; Ketonurie und Medikamente mit Anionen (z. B. Penicilline) verfälschen sie.',
       ],
+      related: [
+        { id: 'anion-gap', text: 'Metabolische Azidose: Anionenlücke im Serum' },
+      ],
       sources: [
         { label: 'Espinel CH. The FENa test. Use in the differential diagnosis of acute renal failure. JAMA 1976;236(6):579–581', url: 'https://doi.org/10.1001/jama.1976.03270060029022' },
         { label: 'Miller TR et al. Urinary diagnostic indices in acute renal failure: a prospective study. Ann Intern Med 1978;89(1):47–50', url: 'https://doi.org/10.7326/0003-4819-89-1-47' },
@@ -887,10 +1216,10 @@
         not: 'Der Normbereich hängt vom Labor und der Messmethode ab. Hypoalbuminämie verkleinert die Lücke und kann eine Additionsazidose verdecken – Albumin deshalb eingeben, wenn bekannt.',
       },
       items: [
-        num('na', 'Natrium', MMOL, 100, 200),
+        num('na', 'Natrium', MMOL, 100, 200, SHARED('na')),
         num('cl', 'Chlorid', MMOL, 50, 160),
         num('hco3', 'Bicarbonat (HCO₃⁻)', MMOL, 1, 60, { hint: 'aus der Blutgasanalyse' }),
-        num('alb', 'Albumin', ALB, 0.5, 7, { optional: true, hint: 'für die Albuminkorrektur' }),
+        num('alb', 'Albumin', ALB, 0.5, 7, { optional: true, shared: 'alb', hint: 'für die Albuminkorrektur' }),
       ],
       max: null,
       compute(a) {
@@ -920,12 +1249,255 @@
         'Berechnung ohne Kalium: Na⁺ − (Cl⁻ + HCO₃⁻). Als Obergrenze sind hier 12 mmol/l angenommen; mit modernen ionenselektiven Messverfahren liegt der Normbereich oft niedriger (etwa 3–11 mmol/l).',
         'Albuminkorrektur nach Figge: + 2,5 mmol/l je 1 g/dl Albumin unter 4,4 g/dl. Delta-Ratio = (AG − 12) / (24 − HCO₃⁻).',
       ],
+      related: [
+        { id: 'osmo-gap', text: 'Verdacht auf toxische Alkohole: osmotische Lücke', when: (t) => t > 12 },
+        { id: 'urin', text: 'Hyperchloräme Azidose: Urin-Anionenlücke', when: (t, a) => t <= 12 && a.hco3 < 22 },
+      ],
       sources: [
         { label: 'Emmett M, Narins RG. Clinical use of the anion gap. Medicine (Baltimore) 1977;56(1):38–54', url: 'https://doi.org/10.1097/00005792-197701000-00002' },
         { label: 'Figge J et al. Anion gap and hypoalbuminemia. Crit Care Med 1998;26(11):1807–1810', url: 'https://doi.org/10.1097/00003246-199811000-00019' },
       ],
     },
+
+    {
+      id: 'calcium',
+      group: 'Niere & Labor',
+      short: 'Calcium korr.',
+      title: 'Albuminkorrigiertes Calcium',
+      subtitle: 'Gesamtcalcium bei erniedrigtem oder erhöhtem Albumin',
+      keywords: 'Calcium Kalzium Hypokalzämie Hyperkalzämie Albumin Payne',
+      unit: 'mmol/l',
+      usage: {
+        when: 'Gesamtcalcium bei verändertem Albumin, z. B. bei Intensivpatienten, Leberzirrhose oder nephrotischem Syndrom: abschätzen, ob eine echte Hypo- oder Hyperkalzämie vorliegt, wenn kein ionisiertes Calcium verfügbar ist.',
+        not: 'Die Korrektur ist ungenau, besonders bei Intensivpatienten, Niereninsuffizienz und Säure-Basen-Störungen. Wenn möglich das ionisierte Calcium (Blutgasanalyse) messen.',
+      },
+      items: [
+        num('ca', 'Gesamtcalcium', CA, 0.5, 5),
+        num('alb', 'Albumin', ALB, 0.5, 7, SHARED('alb')),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round((a.ca + 0.2 * (4 - a.alb)) * 100) / 100;
+      },
+      interpret(total) {
+        const mg = `${formatNumber(total / 0.2495, 1)} mg/dl`;
+        if (total < 1.9) return { level: 'high', label: 'Schwere Hypokalzämie', text: `Entspricht ${mg}. Gefahr von Tetanie, Krampfanfällen und Herzrhythmusstörungen; ionisiertes Calcium und EKG kontrollieren.` };
+        if (total < 2.2) return { level: 'mid', label: 'Hypokalzämie', text: `Entspricht ${mg}. Ionisiertes Calcium bestimmen; Magnesium, Phosphat, Parathormon und Vitamin D prüfen.` };
+        if (total <= 2.6) return { level: 'low', label: 'Normal', text: `Entspricht ${mg}. Referenzbereich etwa 2,2–2,6 mmol/l (laborabhängig).` };
+        if (total < 3.5) return { level: 'mid', label: 'Hyperkalzämie', text: `Entspricht ${mg}. Häufigste Ursachen: primärer Hyperparathyreoidismus und Malignome; Parathormon bestimmen.` };
+        return { level: 'high', label: 'Schwere Hyperkalzämie', text: `Entspricht ${mg}. Gefahr der hyperkalzämischen Krise – Rehydratation, Monitoring, Ursachenabklärung.` };
+      },
+      notes: [
+        'Formel nach Payne: Calcium korrigiert = Calcium + 0,02 × (40 − Albumin in g/l) mmol/l.',
+      ],
+      sources: [
+        { label: 'Payne RB et al. Interpretation of serum calcium in patients with abnormal serum proteins. Br Med J 1973;4(5893):643–646', url: 'https://doi.org/10.1136/bmj.4.5893.643' },
+      ],
+    },
+
+    {
+      id: 'osmo-gap',
+      group: 'Niere & Labor',
+      short: 'Osmolücke',
+      title: 'Osmotische Lücke',
+      subtitle: 'Gemessene minus berechnete Serumosmolalität – Hinweis auf toxische Alkohole',
+      keywords: 'Osmolalität osmolal gap Methanol Ethylenglykol Isopropanol Intoxikation Vergiftung Alkohol Ethanol',
+      unit: 'mosm/kg',
+      usage: {
+        when: 'Verdacht auf eine Vergiftung mit toxischen Alkoholen (Methanol, Ethylenglykol, Isopropanol), besonders bei unklarer metabolischer Azidose mit erhöhter Anionenlücke. Gemessene Osmolalität und Laborwerte aus derselben Blutentnahme verwenden.',
+        not: 'Eine normale Lücke schließt eine Vergiftung nicht aus – spät im Verlauf ist der Alkohol bereits zu sauren Metaboliten abgebaut. Die Osmolalität muss per Gefrierpunktserniedrigung gemessen sein; die Dampfdruckmethode erfasst flüchtige Alkohole nicht.',
+      },
+      items: [
+        num('osm', 'Gemessene Serumosmolalität', [unit('mosm/kg', 1, 0)], 200, 600),
+        num('na', 'Natrium', MMOL, 100, 200, SHARED('na')),
+        num('glu', 'Glukose', GLU, 10, 2000),
+        num('urea', 'Harnstoff', UREA, 5, 600, SHARED('urea')),
+        num('etoh', 'Ethanol', ETOH, 0, 1000, { optional: true, hint: 'falls gemessen; sonst erhöht Ethanol die Lücke' }),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round((a.osm - osmCalc(a)) * 10) / 10;
+      },
+      interpret(total, a) {
+        const calc = `Berechnete Osmolalität ${formatNumber(osmCalc(a), 0)} mosm/kg (2 × Na + Glukose + Harnstoff${a.etoh !== undefined ? ' + Ethanol' : ''}, je in mmol/l).`;
+        if (total <= 10) return { level: 'low', label: 'Keine relevante Lücke', text: `${calc} Eine Vergiftung mit toxischen Alkoholen ist damit nicht sicher ausgeschlossen.` };
+        const etoh = a.etoh === undefined ? ' Ethanol ist nicht eingerechnet und kann die Lücke erklären.' : '';
+        if (total <= 20) return { level: 'mid', label: 'Erhöhte Lücke', text: `${calc} Nicht gemessene osmotisch wirksame Substanzen: toxische Alkohole, Ethanol, Mannitol, Glycerin; mäßig erhöht auch bei Keto- und Laktatazidose oder Niereninsuffizienz.${etoh}` };
+        return { level: 'high', label: 'Deutlich erhöhte Lücke', text: `${calc} Dringender Verdacht auf toxische Alkohole, besonders bei gleichzeitig erhöhter Anionenlücke – Giftinformationszentrum kontaktieren, Antidot (Fomepizol) und Dialyse prüfen.${etoh}` };
+      },
+      notes: [
+        'Normalbereich etwa −2 bis +10 mosm/kg. Umrechnung: Glukose mg/dl ÷ 18, Harnstoff mg/dl ÷ 6, BUN mg/dl ÷ 2,8, Ethanol mg/dl ÷ 4,6.',
+      ],
+      related: [
+        { id: 'anion-gap', text: 'Metabolische Azidose? Anionenlücke berechnen' },
+      ],
+      sources: [
+        { label: 'Kraut JA, Xing SX. Approach to the evaluation of a patient with an increased serum osmolal gap and high-anion-gap metabolic acidosis. Am J Kidney Dis 2011;58(3):480–484', url: 'https://doi.org/10.1053/j.ajkd.2011.05.018' },
+      ],
+    },
+
+    {
+      id: 'sodium',
+      group: 'Niere & Labor',
+      short: 'Natrium-Korrektur',
+      title: 'Natrium-Korrektur',
+      subtitle: 'Hypo- und Hypernatriämie: erwartete Änderung des Serum-Natriums pro Liter Infusion (Adrogué-Madias)',
+      keywords: 'Natrium Hyponatriämie Hypernatriämie Adrogue Madias NaCl 3 % hyperton Korrektur ODS pontine Myelinolyse',
+      unit: 'mmol/l pro Liter',
+      usage: {
+        when: 'Hypo- oder Hypernatriämie: abschätzen, wie stark 1 Liter einer Infusionslösung das Serum-Natrium ändert, und die Infusionsmenge für eine angestrebte Änderung planen.',
+        not: 'Laufende Verluste und Zufuhren (Urin, Drainagen, Trinkmenge) gehen nicht ein; bei einsetzender Wasserdiurese steigt das Natrium schneller als berechnet. Natrium deshalb engmaschig kontrollieren (anfangs alle 2–4 Stunden). Ersetzt nicht die Ursachenabklärung.',
+      },
+      items: [
+        num('na', 'Serum-Natrium', MMOL, 100, 200, SHARED('na')),
+        num('weight', 'Körpergewicht', KG, 1, 300, SHARED('weight')),
+        choice('tbw', 'Patient (Anteil des Körperwassers)', [
+          pick('Mann < 65 Jahre', { tbw: 0.6, hint: '60 % des Körpergewichts' }),
+          pick('Frau < 65 Jahre', { tbw: 0.5, hint: '50 %' }),
+          pick('Mann ≥ 65 Jahre', { tbw: 0.5, hint: '50 %' }),
+          pick('Frau ≥ 65 Jahre', { tbw: 0.45, hint: '45 %' }),
+          pick('Kind', { tbw: 0.6, hint: '60 %' }),
+        ]),
+        choice('fluid', 'Infusionslösung', [
+          pick('NaCl 3 %', { na: 513, hint: '513 mmol/l Natrium' }),
+          pick('NaCl 0,9 %', { na: 154, hint: '154 mmol/l' }),
+          pick('Ringer-Laktat', { na: 130, k: 4, hint: '130 mmol/l Natrium, 4 mmol/l Kalium' }),
+          pick('NaCl 0,45 %', { na: 77, hint: '77 mmol/l' }),
+          pick('Glukose 5 %', { na: 0, hint: 'natriumfrei' }),
+        ]),
+        num('kadd', 'Kaliumzusatz', [unit('mmol/l', 1, 0)], 0, 80, { optional: true, hint: 'mmol Kalium pro Liter Infusionslösung' }),
+        num('target', 'Angestrebte Änderung', MMOL, 1, 20, { optional: true, hint: 'Betrag in mmol/l, z. B. 6 – ergibt die nötige Infusionsmenge' }),
+      ],
+      max: null,
+      compute(a) {
+        return Math.round(sodiumDelta(a) * 10) / 10;
+      },
+      interpret(total, a) {
+        const tbw = a.weight * a.tbw.tbw;
+        const rows = [
+          { name: 'Gesamtkörperwasser', value: `${formatNumber(tbw, 1)} l`, note: `${formatNumber(a.weight, 1)} kg × ${formatPoints(a.tbw.tbw)}`, level: 'info' },
+          { name: 'Änderung pro Liter', value: `${total > 0 ? '+' : ''}${formatPoints(total)} mmol/l`, note: a.fluid.label, level: 'info' },
+        ];
+        if (a.target !== undefined && total !== 0) {
+          const ml = a.target / Math.abs(total) * 1000;
+          rows.push({ name: `Menge für ${formatNumber(a.target, 1)} mmol/l`, value: `${formatNumber(Math.round(ml / 10) * 10, 0)} ml`, note: `${a.fluid.label}; Laufrate je nach Zeitraum festlegen`, level: 'info' });
+        }
+        const delta = `Erwartete Änderung: ${total > 0 ? '+' : ''}${formatPoints(total)} mmol/l pro Liter ${a.fluid.label}.`;
+        if (a.na < 135) {
+          const wrong = total <= 0 ? ' Achtung: Diese Lösung senkt das Natrium bzw. hebt es nicht an.' : '';
+          const level = a.na < 125 ? 'high' : 'mid';
+          return { level, rows, label: a.na < 125 ? 'Schwere Hyponatriämie' : 'Hyponatriämie', text: `${delta}${wrong} Korrekturgrenze: höchstens 10 mmol/l in den ersten 24 Stunden, danach höchstens 8 mmol/l pro 24 Stunden; bei hohem Risiko für ein osmotisches Demyelinisierungssyndrom (Alkoholkrankheit, Mangelernährung, Hypokaliämie, Lebererkrankung) vorsichtiger. Bei schweren Symptomen: 150 ml NaCl 3 % über 20 Minuten, bei Bedarf wiederholen.` };
+        }
+        if (a.na > 145) {
+          const wrong = total >= 0 ? ' Achtung: Diese Lösung senkt das Natrium nicht.' : '';
+          const level = a.na > 160 ? 'high' : 'mid';
+          return { level, rows, label: a.na > 160 ? 'Schwere Hypernatriämie' : 'Hypernatriämie', text: `${delta}${wrong} Bei chronischer Hypernatriämie (> 48 Stunden) höchstens etwa 10 mmol/l pro 24 Stunden senken, um ein Hirnödem zu vermeiden.` };
+        }
+        return { level: 'low', rows, label: 'Normonatriämie', text: delta };
+      },
+      notes: [
+        'Formel: Änderung = (Na Infusion + K Infusion − Na Serum) / (Körperwasser + 1).',
+      ],
+      sources: [
+        { label: 'Adrogué HJ, Madias NE. Hyponatremia. N Engl J Med 2000;342(21):1581–1589', url: 'https://doi.org/10.1056/NEJM200005253422107' },
+        { label: 'Adrogué HJ, Madias NE. Hypernatremia. N Engl J Med 2000;342(20):1493–1499', url: 'https://doi.org/10.1056/NEJM200005183422006' },
+        { label: 'Spasovski G et al. Clinical practice guideline on diagnosis and treatment of hyponatraemia. Eur J Endocrinol 2014;170(3):G1–G47', url: 'https://doi.org/10.1530/EJE-13-1020' },
+      ],
+    },
+
+    {
+      id: 'perfusor',
+      group: 'Medikamente & Infusion',
+      short: 'Perfusor',
+      title: 'Perfusor-Rechner',
+      subtitle: 'Spritzenpumpe: Laufrate (ml/h) aus Dosis (µg/kg/min) – oder umgekehrt',
+      keywords: 'Perfusor Spritzenpumpe Laufrate Katecholamine Noradrenalin Arterenol Adrenalin Suprarenin Dobutamin Dopamin µg/kg/min ml/h Dosis',
+      unit: '',
+      calculator: true,
+      usage: {
+        when: 'Kontinuierliche Gabe über eine Spritzenpumpe, z. B. von Katecholaminen: Laufrate in ml/h für eine Zieldosis in µg/kg/min berechnen – oder bei der Übergabe die aktuelle Dosis aus der laufenden Rate.',
+        not: 'Reine Rechenhilfe: Ersetzt nicht die hausinternen Perfusorstandards und die Doppelkontrolle nach dem Vier-Augen-Prinzip. Nur für gewichtsbezogene Dosierungen in µg/kg/min.',
+      },
+      items: [
+        choice('mode', 'Berechnen', [
+          pick('Laufrate aus Dosis', { key: 'rate' }),
+          pick('Dosis aus Laufrate', { key: 'dose' }),
+        ]),
+        choice('drug', 'Wirkstoff', [
+          pick('Noradrenalin', { maxDose: 1 }),
+          pick('Adrenalin', { maxDose: 1 }),
+          pick('Dobutamin', { maxDose: 20 }),
+          pick('Dopamin', { maxDose: 20 }),
+          pick('Anderer Wirkstoff'),
+        ]),
+        num('mg', 'Wirkstoffmenge in der Spritze', [unit('mg', 1, 2)], 0.01, 2000),
+        num('ml', 'Gesamtvolumen der Spritze', [unit('ml', 1, 0)], 1, 100, { hint: 'nach Verdünnung, z. B. 50 ml' }),
+        num('weight', 'Körpergewicht', KG, 1, 300, SHARED('weight')),
+        num('dose', 'Zieldosis', [unit('µg/kg/min', 1, 3)], 0.001, 100, { when: (v) => v.mode === 0 }),
+        num('rate', 'Laufrate', [unit('ml/h', 1, 1)], 0.1, 200, { when: (v) => v.mode === 1 }),
+      ],
+      max: null,
+      compute(a) {
+        const p = perfusor(a);
+        return a.mode.key === 'rate' ? Math.round(p.rate * 10) / 10 : Math.round(p.dose * 1000) / 1000;
+      },
+      interpret(total, a) {
+        const p = perfusor(a);
+        const toRate = a.mode.key === 'rate';
+        const rows = [
+          { name: 'Konzentration', value: `${formatNumber(p.conc, p.conc < 10 ? 2 : 0)} µg/ml`, note: `${formatNumber(a.mg, 2)} mg in ${formatNumber(a.ml, 0)} ml`, level: 'info' },
+          { name: 'Dosis', value: `${formatNumber(p.dose, 3)} µg/kg/min`, note: `${formatNumber(p.dose * a.weight, 1)} µg/min bei ${formatNumber(a.weight, 1)} kg`, level: 'info' },
+          { name: 'Laufrate', value: `${formatNumber(p.rate, 1)} ml/h`, note: `${formatNumber(p.rate * p.conc / 1000, 2)} mg/h`, level: 'info' },
+          { name: 'Spritze reicht', value: `${formatNumber(a.ml / p.rate, 1)} h`, note: 'bei gleichbleibender Laufrate', level: 'info' },
+        ];
+        const high = a.drug.maxDose !== undefined && p.dose > a.drug.maxDose;
+        const warn = high ? ` Achtung: Die Dosis liegt über ${formatPoints(a.drug.maxDose)} µg/kg/min und damit außerhalb des üblichen Bereichs für ${a.drug.label} – Eingaben prüfen.` : '';
+        return {
+          scoreName: toRate ? 'Laufrate' : 'Dosis',
+          unit: toRate ? 'ml/h' : 'µg/kg/min',
+          level: high ? 'high' : 'info',
+          label: a.drug.label,
+          rows,
+          text: `Laufrate = Dosis × Gewicht × 60 ÷ Konzentration.${warn} Vor Anwendung mit dem lokalen Perfusorstandard abgleichen und im Vier-Augen-Prinzip prüfen.`,
+        };
+      },
+      sources: [],
+    },
   ];
+
+  function news2Parts(a) {
+    const onO2 = a.o2.key === 'o2';
+    const af = a.af <= 8 ? 3 : a.af <= 11 ? 1 : a.af <= 20 ? 0 : a.af <= 24 ? 2 : 3;
+    let spo2;
+    if (!a.scale2) spo2 = a.spo2 >= 96 ? 0 : a.spo2 >= 94 ? 1 : a.spo2 >= 92 ? 2 : 3;
+    else if (onO2 && a.spo2 >= 97) spo2 = 3;
+    else if (onO2 && a.spo2 >= 95) spo2 = 2;
+    else if (onO2 && a.spo2 >= 93) spo2 = 1;
+    else spo2 = a.spo2 >= 88 ? 0 : a.spo2 >= 86 ? 1 : a.spo2 >= 84 ? 2 : 3;
+    const sbp = a.sbp <= 90 ? 3 : a.sbp <= 100 ? 2 : a.sbp <= 110 ? 1 : a.sbp <= 219 ? 0 : 3;
+    const hr = a.hr <= 40 ? 3 : a.hr <= 50 ? 1 : a.hr <= 90 ? 0 : a.hr <= 110 ? 1 : a.hr <= 130 ? 2 : 3;
+    const temp = a.temp <= 35 ? 3 : a.temp <= 36 ? 1 : a.temp <= 38 ? 0 : a.temp <= 39 ? 1 : 2;
+    const parts = { af, spo2, o2: a.o2.points, sbp, hr, cns: a.cns.points, temp };
+    parts.red = Object.values(parts).some((v) => v === 3);
+    return parts;
+  }
+
+  // mmol/l: glucose mg/dl ÷ 18,016, urea mg/dl ÷ 6,006, ethanol mg/dl ÷ 4,607
+  function osmCalc(a) {
+    return 2 * a.na + a.glu / 18.016 + a.urea / 6.006 + (a.etoh !== undefined ? a.etoh / 4.607 : 0);
+  }
+
+  function sodiumDelta(a) {
+    const infusate = a.fluid.na + (a.fluid.k || 0) + (a.kadd || 0);
+    return (infusate - a.na) / (a.weight * a.tbw.tbw + 1);
+  }
+
+  // conc in µg/ml, dose in µg/kg/min, rate in ml/h
+  function perfusor(a) {
+    const conc = (a.mg * 1000) / a.ml;
+    if (a.mode.key === 'rate') return { conc, dose: a.dose, rate: (a.dose * a.weight * 60) / conc };
+    return { conc, rate: a.rate, dose: (a.rate * conc) / (a.weight * 60) };
+  }
 
   function sofaParts(a) {
     const pf = a.pao2 / (a.fio2 / 100);
@@ -1005,10 +1577,16 @@
 
   SCORES.forEach((s) => {
     if ('max' in s) return;
-    s.max = s.items.reduce((sum, item) => sum + (item.type === 'bool'
-      ? Math.max(0, item.points)
-      : Math.max(...item.options.map((o) => o.points))), 0);
+    s.max = s.items.reduce((sum, item) => sum + (item.type === 'bool' ? Math.max(0, item.points || 0)
+      : item.type === 'choice' ? Math.max(...item.options.map((o) => o.points || 0))
+      : 0), 0);
   });
+
+  // Items currently part of the form: headings carry no value and `when`
+  // hides inputs that do not apply (e.g. dose vs. rate in the pump calculator).
+  function activeItems(score, values) {
+    return score.items.filter((item) => item.type !== 'heading' && (!item.when || item.when(values)));
+  }
 
   // values: { [itemId]: true/false for bool items, option index for choice
   // items, number in the canonical unit for number items }
@@ -1017,7 +1595,7 @@
     const missing = [];
     const untestable = [];
     const answers = {};
-    score.items.forEach((item) => {
+    activeItems(score, values).forEach((item) => {
       const v = values[item.id];
       if (item.type === 'bool') {
         answers[item.id] = !!v;
@@ -1040,12 +1618,22 @@
     return {
       total,
       max: result && result.max !== undefined ? result.max : score.max,
+      unit: result && result.unit !== undefined ? result.unit : score.unit,
       name: (result && result.scoreName) || score.short,
       complete,
       missing,
       untestable,
       result,
     };
+  }
+
+  // "5/10 Punkte", "92 ml/min/1,73 m²", "1,2" – or null for rules, whose
+  // result is the label alone.
+  function totalText(score, r) {
+    if (score.rule || r.total === null) return null;
+    const n = formatPoints(r.total);
+    if (r.unit !== undefined) return r.unit ? `${n} ${r.unit}` : n;
+    return r.max !== null ? `${n}/${formatPoints(r.max)} Punkte` : `${n} Punkte`;
   }
 
   function formatPoints(n) {
@@ -1064,15 +1652,13 @@
   function summaryText(score, values) {
     const r = evaluate(score, values);
     if (!r.complete) return null;
-    const total = score.unit ? `${formatPoints(r.total)} ${score.unit}`
-      : r.max !== null ? `${formatPoints(r.total)}/${formatPoints(r.max)} Punkte`
-      : `${formatPoints(r.total)} Punkte`;
-    const lines = [`${r.name}: ${total} – ${r.result.label}`];
+    const total = totalText(score, r);
+    const lines = [total === null ? `${r.name}: ${r.result.label}` : `${r.name}: ${total} – ${r.result.label}`];
     (r.result.rows || []).forEach((row) => lines.push(`${row.name}: ${row.value} – ${row.note}`));
     if (r.result.rows) lines.push('Werte:');
     const met = [];
     let hasCriteria = false;
-    score.items.forEach((item) => {
+    activeItems(score, values).forEach((item) => {
       const v = values[item.id];
       if (item.type === 'bool' && item.points !== undefined) {
         hasCriteria = true;
@@ -1092,7 +1678,7 @@
     return lines.join('\n');
   }
 
-  const api = { SCORES, GROUPS, evaluate, formatPoints, formatNumber, summaryText };
+  const api = { SCORES, GROUPS, evaluate, activeItems, totalText, formatPoints, formatNumber, summaryText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KlinikScores = api;
 })(this);

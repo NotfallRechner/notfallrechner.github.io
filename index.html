@@ -3,20 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Klinische Scores</title>
-  <meta name="description" content="Klinische Scores schnell berechnen – qSOFA, SOFA, GCS, CURB-65, HEART, CHA₂DS₂-VA, HAS-BLED, Wells, PERC, NIHSS, MELD, eGFR und mehr, mit Anwendungshinweisen und Originalquelle.">
+  <title>NotfallRechner</title>
+  <meta name="description" content="NotfallRechner: klinische Scores und Rechner für Notaufnahme und Station – NEWS2, qSOFA, SOFA, GCS, HEART, Wells, NIHSS, Canadian CT Head, eGFR, Urin-Indizes, Perfusor und mehr, mit Anwendungshinweisen und Originalquelle.">
   <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-title" content="Scores">
+  <meta name="apple-mobile-web-app-title" content="NotfallRechner">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="top">
     <div class="brand-row">
-      <div class="brand">Klinische Scores</div>
+      <div class="brand">NotfallRechner</div>
+      <button id="new-patient" type="button" class="new-patient" title="Alle Eingaben in allen Rechnern löschen">Neuer Patient</button>
       <button id="search-open" type="button" class="search-open" aria-keyshortcuts="/" title="Suchen ( / )">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Suchen
@@ -49,9 +50,11 @@
       Entscheidungshilfe für medizinisches Fachpersonal. Kein Medizinprodukt; ersetzt nicht die klinische Beurteilung.
       Eingaben werden weder gespeichert noch übertragen; nur Favoriten und Anzeigeeinstellungen merkt sich der Browser.
     </p>
+    <p class="footer"><span id="version"></span> · <a id="feedback" target="_blank" rel="noopener">Fehler oder Wunsch melden</a></p>
   </main>
 
   <div id="bar" class="bar" role="status"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <dialog id="search" class="search" aria-label="Score suchen">
     <div class="search-inner">
@@ -63,6 +66,7 @@
     </div>
   </dialog>
 
+  <script src="js/version.js"></script>
   <script src="js/scores.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -1,7 +1,7 @@
 {
-  "name": "Klinische Scores",
-  "short_name": "Scores",
-  "description": "Klinische Scores schnell berechnen – mit Anwendungshinweisen, Interpretation und Originalquelle.",
+  "name": "NotfallRechner",
+  "short_name": "NotfallRechner",
+  "description": "Klinische Scores und Rechner für Notaufnahme und Station – mit Anwendungshinweisen, Interpretation und Originalquelle.",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

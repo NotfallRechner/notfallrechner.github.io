@@ -1,7 +1,9 @@
 (function () {
   'use strict';
 
-  const { SCORES, GROUPS, evaluate, formatPoints, formatNumber, summaryText } = window.KlinikScores;
+  const { SCORES, GROUPS, evaluate, totalText, formatPoints, formatNumber, summaryText } = window.KlinikScores;
+  const VERSION = window.NotfallVersion;
+  const APP_NAME = 'NotfallRechner';
   const $ = (id) => document.getElementById(id);
   const nav = $('nav');
   const form = $('form');
@@ -16,6 +18,9 @@
   const valuesById = {};
   // Text and unit of number fields as typed, so switching scores keeps them.
   const rawById = {};
+  // Lab values and vitals entered in one calculator, offered in the next
+  // (key = item.shared, value in the canonical unit). Lives only in memory.
+  const shared = {};
   let score = null;
 
   // Only UI preferences are stored, never patient values.
@@ -131,8 +136,9 @@
         values[item.id] = idx;
         grid.querySelectorAll('.option').forEach((x, i) => x.setAttribute('aria-checked', String(i === idx)));
         fs.classList.remove('missing');
+        if (score.items.some((i) => i.when)) renderForm();
         update();
-        if (firstAnswer) scrollToNextOpen(fs);
+        if (firstAnswer) scrollToNextOpen(form.querySelector(`fieldset[data-id="${CSS.escape(item.id)}"]`));
       });
       grid.appendChild(b);
     });
@@ -152,7 +158,15 @@
   function numberBlock(item, values) {
     const raw = rawById[score.id];
     const units = item.units;
-    const state = raw[item.id] || (raw[item.id] = { text: '', unit: Math.min(unitPrefs[unitKey(item)] || 0, Math.max(0, units.length - 1)) });
+    let state = raw[item.id];
+    if (!state) {
+      state = raw[item.id] = { text: '', unit: Math.min(unitPrefs[unitKey(item)] || 0, Math.max(0, units.length - 1)) };
+      if (item.shared && shared[item.shared] !== undefined) {
+        const u = units[state.unit];
+        state.text = formatNumber(shared[item.shared] / (u ? u.factor : 1), u ? u.decimals : 2);
+        state.prefilled = true;
+      }
+    }
 
     const fs = el('fieldset', 'choice num');
     fs.dataset.id = item.id;
@@ -171,6 +185,8 @@
     const err = el('p', 'num-error');
     err.id = 'err-' + item.id;
     input.setAttribute('aria-describedby', err.id);
+    const note = el('p', 'num-shared', 'Aus einem anderen Rechner übernommen – bitte prüfen.');
+    fs.classList.toggle('prefilled', !!state.prefilled);
 
     function commit() {
       const u = units[state.unit];
@@ -180,6 +196,7 @@
       const ok = value !== null && value >= item.min * 0.9999 && value <= item.max * 1.0001;
       if (ok) values[item.id] = value;
       else delete values[item.id];
+      if (ok && item.shared) shared[item.shared] = value;
       const bad = state.text.trim() !== '' && !ok;
       fs.classList.toggle('invalid', bad);
       input.setAttribute('aria-invalid', String(bad));
@@ -193,6 +210,8 @@
 
     input.addEventListener('input', () => {
       state.text = input.value;
+      state.prefilled = false;
+      fs.classList.remove('prefilled');
       commit();
       update();
     });
@@ -235,7 +254,7 @@
       row.appendChild(el('span', 'unit-label', units[0].label));
     }
 
-    fs.append(row, err);
+    fs.append(row, err, note);
     commit();
     return fs;
   }
@@ -255,8 +274,9 @@
 
   function renderForm() {
     const values = valuesById[score.id];
-    form.replaceChildren(...score.items.map((item) =>
-      item.type === 'bool' ? boolRow(item, values)
+    form.replaceChildren(...score.items.filter((item) => !item.when || item.when(values)).map((item) =>
+      item.type === 'heading' ? el('h2', 'form-heading', item.label)
+        : item.type === 'bool' ? boolRow(item, values)
         : item.type === 'number' ? numberBlock(item, values)
         : choiceBlock(item, values)));
   }
@@ -323,6 +343,73 @@
     return list;
   }
 
+  // `when` conditions of related links see the same answers as interpret().
+  function currentAnswers() {
+    const values = valuesById[score.id];
+    const a = {};
+    score.items.forEach((item) => {
+      const v = values[item.id];
+      if (item.type === 'choice') a[item.id] = v === undefined ? undefined : item.options[v];
+      else if (item.type === 'bool') a[item.id] = !!v;
+      else if (item.type === 'number') a[item.id] = v;
+    });
+    return a;
+  }
+
+  function relatedList(links) {
+    const box = el('div', 'related');
+    box.appendChild(el('h3', null, 'Passend dazu'));
+    links.forEach((l) => {
+      const target = SCORES.find((s) => s.id === l.id);
+      const a = el('a', 'related-link');
+      a.href = '#' + l.id;
+      a.append(el('span', 'related-name', target.title), el('span', 'hint', l.text));
+      box.appendChild(a);
+    });
+    return box;
+  }
+
+  function formatDate(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+  }
+
+  // Prefilled GitHub issue; the reminder matters because issues are public.
+  function issueUrl(s) {
+    const body = [
+      `**Rechner:** ${s ? `${s.title} (${s.id})` : '–'}`,
+      `**Version:** ${VERSION.number}`,
+      '',
+      '**Was ist falsch oder unklar?**',
+      '',
+      '',
+      '**Wie sollte es sein (gern mit Quelle)?**',
+      '',
+      '',
+      '> ⚠️ Bitte keine Patientendaten eintragen – Meldungen sind öffentlich sichtbar.',
+    ].join('\n');
+    const title = s ? `[${s.short}] ` : '';
+    return `${VERSION.repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  }
+
+  function reviewLine() {
+    const p = el('p', 'review');
+    const rv = score.reviewed;
+    if (rv) {
+      p.dataset.state = 'done';
+      p.append(`Fachlich geprüft am ${formatDate(rv.date)} von ${rv.by}. `);
+    } else {
+      p.dataset.state = 'open';
+      p.append('Fachliche Prüfung ausstehend. ');
+    }
+    const a = el('a', null, 'Fehler melden');
+    a.href = issueUrl(score);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    p.appendChild(a);
+    return p;
+  }
+
   function update() {
     const r = evaluate(score, valuesById[score.id]);
     const level = r.complete ? r.result.level : 'pending';
@@ -332,12 +419,16 @@
     const label = r.complete
       ? r.result.label
       : `${r.missing.length} offen`;
-    const suffix = score.unit || (r.max !== null ? '/ ' + formatPoints(r.max) : '');
-    bar.replaceChildren(
-      el('span', 'bar-name', r.name),
-      el('span', 'bar-total', r.total === null ? '–' : formatPoints(r.total)),
-      el('span', 'bar-max', suffix),
-      el('span', 'bar-label', label));
+    if (score.rule) {
+      bar.replaceChildren(el('span', 'bar-name', r.name), el('span', 'bar-label', label));
+    } else {
+      const suffix = r.unit !== undefined ? r.unit : r.max !== null ? '/ ' + formatPoints(r.max) : '';
+      bar.replaceChildren(
+        el('span', 'bar-name', r.name),
+        el('span', 'bar-total', r.total === null ? '–' : formatPoints(r.total)),
+        el('span', 'bar-max', suffix),
+        el('span', 'bar-label', label));
+    }
     if (!r.complete) {
       const jump = el('button', 'bar-jump', 'Weiter');
       jump.type = 'button';
@@ -353,12 +444,8 @@
 
     const parts = [];
     if (r.complete) {
-      const kicker = score.unit
-        ? `${r.name}: ${formatPoints(r.total)} ${score.unit}`
-        : r.max !== null
-          ? `${r.name}: ${formatPoints(r.total)} von ${formatPoints(r.max)} Punkten`
-          : `${r.name}: ${formatPoints(r.total)} Punkte`;
-      parts.push(el('p', 'detail-kicker', kicker));
+      const total = totalText(score, r);
+      parts.push(el('p', 'detail-kicker', total === null ? score.title : `${r.name}: ${total}`));
       parts.push(el('h2', 'detail-label', r.result.label));
       parts.push(el('p', 'detail-text', r.result.text));
       if (r.result.rows) parts.push(indexTable(r.result.rows));
@@ -366,6 +453,9 @@
         parts.push(el('p', 'detail-warn', 'Nicht testbar: ' + r.untestable.map((i) => i.label).join(', ')));
       }
       parts.push(copyButton());
+      const answers = currentAnswers();
+      const links = (score.related || []).filter((l) => !l.when || l.when(r.total, answers));
+      if (links.length) parts.push(relatedList(links));
     } else {
       parts.push(el('h2', 'detail-label', 'Interpretation folgt'));
       parts.push(el('p', 'detail-text', 'Sobald alle Angaben gemacht sind, erscheint hier die Einordnung.'));
@@ -376,14 +466,17 @@
       parts.push(ul);
     }
     const src = el('div', 'sources');
-    src.appendChild(el('h3', null, score.sources.length > 1 ? 'Originalquellen' : 'Originalquelle'));
-    score.sources.forEach((s) => {
-      const a = el('a', null, s.label);
-      a.href = s.url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      src.appendChild(a);
-    });
+    if (score.sources.length) {
+      src.appendChild(el('h3', null, score.sources.length > 1 ? 'Originalquellen' : 'Originalquelle'));
+      score.sources.forEach((s) => {
+        const a = el('a', null, s.label);
+        a.href = s.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        src.appendChild(a);
+      });
+    }
+    src.appendChild(reviewLine());
     parts.push(src);
     detail.replaceChildren(...parts);
   }
@@ -398,7 +491,7 @@
     });
     $('title').textContent = score.title;
     $('subtitle').textContent = score.subtitle;
-    document.title = score.short + ' · Klinische Scores';
+    document.title = score.short + ' · ' + APP_NAME;
     renderFav();
     renderUsage();
     renderForm();
@@ -484,12 +577,72 @@
   usage.addEventListener('toggle', () => store.set('usageOpen', usage.open));
 
   $('reset').addEventListener('click', () => {
+    score.items.forEach((item) => { if (item.shared) delete shared[item.shared]; });
     valuesById[score.id] = {};
     rawById[score.id] = {};
     renderForm();
     update();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
+
+  // Forget every entry in every calculator, e.g. before the next patient.
+  $('new-patient').addEventListener('click', () => {
+    [valuesById, rawById, shared].forEach((o) => Object.keys(o).forEach((k) => delete o[k]));
+    valuesById[score.id] = {};
+    rawById[score.id] = {};
+    renderForm();
+    update();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('Alle Eingaben gelöscht');
+  });
+
+  function toast(text, action) {
+    const t = $('toast');
+    t.replaceChildren(el('span', null, text));
+    if (action) {
+      const b = el('button', 'toast-action', action.label);
+      b.type = 'button';
+      b.addEventListener('click', action.run);
+      t.appendChild(b);
+    }
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    if (!action) toast.timer = setTimeout(() => { t.hidden = true; }, 2500);
+  }
+
+  // --- Updates --------------------------------------------------------------
+
+  // Installed apps can stay open for days; compare with the published version
+  // now and then and offer a reload instead of silently running old content.
+  function checkForUpdate() {
+    if (!location.protocol.startsWith('http')) return;
+    fetch('js/version.js', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.text() : ''))
+      .then((text) => {
+        const m = /number:\s*'([^']+)'/.exec(text);
+        if (!m || m[1] === VERSION.number) return;
+        toast(`Neue Version ${m[1]} verfügbar`, {
+          label: 'Neu laden',
+          run: () => {
+            const reload = () => location.reload();
+            if (!navigator.serviceWorker) return reload();
+            navigator.serviceWorker.getRegistration()
+              .then((reg) => reg && reg.update())
+              .then(reload, reload);
+          },
+        });
+      })
+      .catch(() => { /* offline */ });
+  }
+
+  setTimeout(checkForUpdate, 5000);
+  setInterval(checkForUpdate, 30 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkForUpdate();
+  });
+
+  $('version').textContent = `Version ${VERSION.number} · Stand ${formatDate(VERSION.date)}`;
+  $('feedback').href = issueUrl(null);
 
   window.addEventListener('hashchange', () => {
     select(location.hash.slice(1));

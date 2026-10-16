@@ -1,6 +1,9 @@
 // Run with: node tests/scores.test.js
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { SCORES, GROUPS, evaluate, formatPoints, summaryText } = require('../js/scores.js');
+const VERSION = require('../js/version.js');
 
 const byId = Object.fromEntries(SCORES.map((s) => [s.id, s]));
 let passed = 0;
@@ -100,7 +103,7 @@ test('every score has group, usage, sources and unique id', () => {
   SCORES.forEach((s) => {
     assert.ok(GROUPS.includes(s.group), s.id + ' group');
     assert.ok(s.usage && s.usage.when.length > 40, s.id + ' usage');
-    assert.ok(s.sources.length > 0, s.id + ' sources');
+    assert.ok(s.sources.length > 0 || s.calculator, s.id + ' sources');
   });
 });
 
@@ -316,6 +319,160 @@ test('summary text for documentation', () => {
   assert.ok(urin.includes('Werte:'));
   assert.ok(urin.includes('Urin-Kreatinin: 100 mg/dl'));
   assert.ok(urin.includes('Diuretika in den letzten 24 Stunden: nein'));
+});
+
+test('related links point to existing calculators', () => {
+  SCORES.forEach((s) => (s.related || []).forEach((l) => {
+    assert.ok(byId[l.id], `${s.id} → ${l.id}`);
+    assert.notEqual(l.id, s.id);
+  }));
+});
+
+test('shared inputs use the same canonical unit everywhere', () => {
+  const units = {};
+  SCORES.forEach((s) => s.items.filter((i) => i.shared).forEach((i) => {
+    const label = i.units[0].label;
+    units[i.shared] = units[i.shared] || label;
+    assert.equal(label, units[i.shared], `${s.id}.${i.id} (${i.shared})`);
+  }));
+  assert.ok(Object.keys(units).length >= 8);
+});
+
+test('version file is valid and the service worker caches it', () => {
+  assert.match(VERSION.number, /^\d+\.\d+\.\d+$/);
+  assert.match(VERSION.date, /^\d{4}-\d{2}-\d{2}$/);
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  ['js/version.js', 'js/scores.js', 'js/app.js', 'css/style.css', 'index.html'].forEach((f) => assert.ok(sw.includes(`'${f}'`), f));
+  // The update check in app.js reads the version with this pattern.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'version.js'), 'utf8');
+  assert.equal(/number:\s*'([^']+)'/.exec(src)[1], VERSION.number);
+});
+
+test('Wells LE: age-adjusted D-dimer cut-off', () => {
+  const s = byId['wells-le'];
+  assert.equal(s.max, 12.5);
+  assert.equal(evaluate(s, {}).complete, true);
+  assert.match(evaluate(s, {}).result.text, /Alter × 10/);
+  assert.match(evaluate(s, { age: 72 }).result.text, /720 µg\/l FEU/);
+  assert.match(evaluate(s, { age: 45 }).result.text, /500 µg\/l FEU/);
+  assert.doesNotMatch(evaluate(s, { dvt: true, alt: true, age: 72 }).result.text, /720/);
+});
+
+test('NEWS2 points, red score and scale 2', () => {
+  const s = byId.news2;
+  const normal = { af: 16, spo2: 97, o2: 0, sbp: 125, hr: 75, cns: 0, temp: 36.8 };
+  assert.equal(evaluate(s, normal).total, 0);
+  // AF 22 (2), SpO2 95 (1), O2 (2), RR 105 (1), HR 115 (2), A (0), 38,5 °C (1)
+  const sick = evaluate(s, { af: 22, spo2: 95, o2: 1, sbp: 105, hr: 115, cns: 0, temp: 38.5 });
+  assert.equal(sick.total, 9);
+  assert.equal(sick.result.level, 'high');
+  const red = evaluate(s, Object.assign({}, normal, { cns: 1 }));
+  assert.equal(red.total, 3);
+  assert.equal(red.result.label, 'Niedrig-mittleres Risiko');
+  assert.equal(evaluate(s, Object.assign({}, normal, { af: 22, hr: 115, temp: 38.5 })).result.label, 'Mittleres Risiko');
+  // Scale 2: 89 % on oxygen scores 0 for SpO2, 97 % on oxygen scores 3
+  assert.equal(evaluate(s, Object.assign({}, normal, { scale2: true, spo2: 89, o2: 1 })).total, 2);
+  assert.equal(evaluate(s, Object.assign({}, normal, { scale2: true, spo2: 97, o2: 1 })).total, 5);
+  assert.equal(evaluate(s, Object.assign({}, normal, { scale2: true, spo2: 97, o2: 0 })).total, 0);
+});
+
+test('Shock index', () => {
+  const s = byId['shock-index'];
+  const r = evaluate(s, { hr: 120, sbp: 90 });
+  assert.equal(r.total, 1.33);
+  assert.equal(r.result.level, 'high');
+  assert.equal(evaluate(s, { hr: 70, sbp: 120 }).result.level, 'low');
+  assert.equal(summaryText(s, { hr: 120, sbp: 90 }).split('\n')[0], 'Schockindex: 1,33 – Schock wahrscheinlich');
+});
+
+test('Canadian CT Head Rule', () => {
+  const s = byId['ct-head'];
+  assert.equal(evaluate(s, {}).result.level, 'low');
+  assert.equal(evaluate(s, { age: true }).result.level, 'high');
+  assert.equal(evaluate(s, { mech: true }).result.level, 'mid');
+  assert.equal(summaryText(s, { mech: true }).split('\n')[0], 'CT Head: CT indiziert');
+});
+
+test('Canadian C-Spine Rule steps', () => {
+  const s = byId['c-spine'];
+  assert.equal(evaluate(s, {}).result.label, 'Bildgebung empfohlen');
+  assert.match(evaluate(s, {}).result.text, /Kein Niedrigrisiko-Faktor/);
+  assert.equal(evaluate(s, { sit: true }).result.label, 'Bildgebung empfohlen');
+  assert.equal(evaluate(s, { sit: true, rot: true }).result.label, 'Keine Bildgebung nötig');
+  assert.match(evaluate(s, { age: true, sit: true, rot: true }).result.text, /Hochrisiko/);
+});
+
+test('NEXUS', () => {
+  assert.equal(evaluate(byId.nexus, {}).result.level, 'low');
+  assert.equal(evaluate(byId.nexus, { intox: true }).result.level, 'high');
+});
+
+test('Parkland formula', () => {
+  const s = byId.parkland;
+  const r = evaluate(s, { weight: 70, vkof: 30 });
+  assert.equal(r.total, 8400);
+  assert.equal(r.result.rows[0].value, '525 ml/h');
+  assert.equal(r.result.rows[1].value, '263 ml/h');
+  assert.equal(r.result.rows[2].value, '35 ml/h');
+  const late = evaluate(s, { weight: 70, vkof: 30, hours: 2 });
+  assert.equal(late.result.rows[0].value, '700 ml/h');
+  assert.equal(evaluate(s, { weight: 70, vkof: 10 }).result.label, 'Unter 15 % VKOF');
+});
+
+test('Albumin-corrected calcium', () => {
+  const s = byId.calcium;
+  assert.equal(evaluate(s, { ca: 2.0, alb: 2.5 }).total, 2.3);
+  assert.equal(evaluate(s, { ca: 2.0, alb: 2.5 }).result.label, 'Normal');
+  assert.equal(evaluate(s, { ca: 1.7, alb: 4.0 }).result.level, 'high');
+  assert.equal(evaluate(s, { ca: 3.0, alb: 4.0 }).result.label, 'Hyperkalzämie');
+});
+
+test('Osmolal gap', () => {
+  const s = byId['osmo-gap'];
+  // 2 × 140 + 90/18 + 30/6 ≈ 290 → gap 30
+  const r = evaluate(s, { osm: 320, na: 140, glu: 90, urea: 30 });
+  assert.equal(r.total, 30);
+  assert.equal(r.result.level, 'high');
+  assert.match(r.result.text, /Ethanol ist nicht eingerechnet/);
+  // 100 mg/dl ethanol ≈ 21,7 mmol/l
+  assert.equal(evaluate(s, { osm: 320, na: 140, glu: 90, urea: 30, etoh: 100 }).total, 8.3);
+});
+
+test('Sodium correction (Adrogué-Madias)', () => {
+  const s = byId.sodium;
+  // (513 − 115) / (70 × 0,6 + 1) = 9,26
+  const hypo = evaluate(s, { na: 115, weight: 70, tbw: 0, fluid: 0, target: 6 });
+  assert.equal(hypo.total, 9.3);
+  assert.equal(hypo.result.label, 'Schwere Hyponatriämie');
+  assert.equal(hypo.result.rows[2].value, '650 ml');
+  // (0 − 160) / (60 × 0,5 + 1) = −5,16
+  const hyper = evaluate(s, { na: 160, weight: 60, tbw: 1, fluid: 4 });
+  assert.equal(hyper.total, -5.2);
+  assert.equal(hyper.result.label, 'Hypernatriämie');
+  assert.match(evaluate(s, { na: 125, weight: 70, tbw: 0, fluid: 4 }).result.text, /senkt das Natrium/);
+  // Ringer-Laktat includes 4 mmol/l potassium
+  assert.equal(evaluate(s, { na: 130, weight: 70, tbw: 0, fluid: 2 }).total, 0.1);
+});
+
+test('Perfusor: rate from dose and dose from rate', () => {
+  const s = byId.perfusor;
+  // 5 mg / 50 ml = 100 µg/ml; 0,1 µg/kg/min × 70 kg × 60 / 100 = 4,2 ml/h
+  const toRate = evaluate(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 0.1 });
+  assert.equal(toRate.total, 4.2);
+  assert.equal(toRate.unit, 'ml/h');
+  assert.equal(toRate.name, 'Laufrate');
+  assert.equal(toRate.result.label, 'Noradrenalin');
+  const toDose = evaluate(s, { mode: 1, drug: 0, mg: 5, ml: 50, weight: 70, rate: 4.2 });
+  assert.equal(toDose.total, 0.1);
+  assert.equal(toDose.unit, 'µg/kg/min');
+  // The input for the other direction is ignored and not required
+  assert.deepEqual(evaluate(s, { mode: 1, drug: 0, mg: 5, ml: 50, weight: 70 }).missing.map((i) => i.id), ['rate']);
+  const high = evaluate(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 2 });
+  assert.equal(high.result.level, 'high');
+  assert.match(high.result.text, /außerhalb des üblichen Bereichs/);
+  const text = summaryText(s, { mode: 0, drug: 0, mg: 5, ml: 50, weight: 70, dose: 0.1, rate: 99 });
+  assert.match(text, /^Laufrate: 4,2 ml\/h – Noradrenalin\n/);
+  assert.doesNotMatch(text, /Laufrate: 99/);
 });
 
 console.log(`\n${passed} tests passed`);
