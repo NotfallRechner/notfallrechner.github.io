@@ -88,7 +88,14 @@ window.__runExample = async (id, values) => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   document.getElementById('new-patient').click();
   if (location.hash !== '#' + id) { location.hash = id; await wait(120); }
-  const fits = (el) => !el || (el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && el.getBoundingClientRect().height <= 44);
+  // Fits = nothing clipped and at most two lines of text (lines counted from the
+  // text layout, so it does not depend on font metrics or zoom).
+  const lines = (el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  };
+  const fits = (el) => !el || (el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && lines(el) <= 2);
   const emptyFits = fits(document.querySelector('#bar .bar-label'));
   const score = KlinikScores.SCORES.find((s) => s.id === id);
   for (const item of score.items) {
@@ -146,6 +153,11 @@ window.__runExample = async (id, values) => {
     else fail(`start page shows ${cards} of ${SCORES.length} calculators`);
 
     await b.evaluate(PAGE_HELPERS);
+    // UI_TEST_FONT forces a wide font to reproduce layouts of other systems,
+    // e.g. UI_TEST_FONT=Verdana mimics the wider Linux fonts used in CI.
+    if (process.env.UI_TEST_FONT) {
+      await b.evaluate(`{ const st = document.createElement('style'); st.textContent = 'body, button, input { font-family: ${process.env.UI_TEST_FONT} !important; }'; document.head.appendChild(st); } 1`);
+    }
     let count = 0;
     for (const large of [false, true]) {
     await b.evaluate(`document.documentElement.classList.toggle('large-text', ${large}); 1`);
