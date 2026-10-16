@@ -14,6 +14,10 @@
   const search = $('search');
   const searchInput = $('search-input');
   const searchList = $('search-list');
+  const home = $('home');
+  const calc = $('calc');
+  const homeSearch = $('home-search');
+  const homeList = $('home-list');
 
   const valuesById = {};
   // Text and unit of number fields as typed, so switching scores keeps them.
@@ -41,6 +45,9 @@
   };
   let favs = store.get('favs', []);
   if (!Array.isArray(favs)) favs = [];
+  // Recently opened calculators for the start page (ids only, newest first).
+  let recent = store.get('recent', []);
+  if (!Array.isArray(recent)) recent = [];
   const unitPrefs = store.get('units', {}) || {};
 
   function el(tag, cls, text) {
@@ -64,6 +71,7 @@
     renderNav();
     renderFav();
     if (search.open) renderSearch();
+    if (!home.hidden) renderHome();
   }
 
   // Only favourites appear in the bar; everything else is reached via search.
@@ -88,6 +96,7 @@
   }
 
   function renderFav() {
+    if (!score) return;
     const on = isFav(score.id);
     favBtn.setAttribute('aria-pressed', String(on));
     favBtn.setAttribute('aria-label', on ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen');
@@ -481,8 +490,19 @@
     detail.replaceChildren(...parts);
   }
 
+  // Empty or unknown hash → start page; otherwise the calculator with that id.
   function select(id) {
-    score = SCORES.find((s) => s.id === id) || SCORES[0];
+    const found = SCORES.find((s) => s.id === id);
+    if (!found) {
+      showHome();
+      return;
+    }
+    score = found;
+    home.hidden = true;
+    calc.hidden = false;
+    bar.hidden = false;
+    recent = [score.id].concat(recent.filter((r) => r !== score.id)).slice(0, 5);
+    store.set('recent', recent);
     valuesById[score.id] = valuesById[score.id] || {};
     rawById[score.id] = rawById[score.id] || {};
     nav.querySelectorAll('.tab').forEach((a) => {
@@ -497,6 +517,74 @@
     renderForm();
     update();
   }
+
+  // --- Start page -----------------------------------------------------------
+
+  function showHome() {
+    score = null;
+    calc.hidden = true;
+    bar.hidden = true;
+    home.hidden = false;
+    nav.querySelectorAll('.tab').forEach((a) => a.removeAttribute('aria-current'));
+    document.title = APP_NAME;
+    homeSearch.value = '';
+    renderHome();
+  }
+
+  function starButton(s) {
+    const star = el('button', 'star');
+    star.type = 'button';
+    star.setAttribute('aria-pressed', String(isFav(s.id)));
+    star.setAttribute('aria-label', `${s.short} ${isFav(s.id) ? 'aus Favoriten entfernen' : 'zu Favoriten hinzufügen'}`);
+    star.addEventListener('click', () => toggleFav(s.id));
+    return star;
+  }
+
+  function renderHome() {
+    const terms = norm(homeSearch.value).split(/\s+/).filter(Boolean);
+    const hits = SCORES.filter((s) => matches(s, terms));
+    const parts = [];
+    const lastUsed = recent.map((id) => SCORES.find((s) => s.id === id)).filter(Boolean);
+    if (!terms.length && lastUsed.length) {
+      const sec = el('section', 'home-group');
+      sec.appendChild(el('h2', null, 'Zuletzt verwendet'));
+      const chips = el('div', 'home-recent');
+      lastUsed.forEach((s) => {
+        const a = el('a', 'tab', s.short);
+        a.href = '#' + s.id;
+        chips.appendChild(a);
+      });
+      sec.appendChild(chips);
+      parts.push(sec);
+    }
+    GROUPS.forEach((g) => {
+      const list = hits.filter((s) => s.group === g);
+      if (!list.length) return;
+      const sec = el('section', 'home-group');
+      sec.appendChild(el('h2', null, g));
+      const grid = el('div', 'home-grid');
+      list.forEach((s) => {
+        const card = el('div', 'home-card');
+        const a = el('a', 'home-link');
+        a.href = '#' + s.id;
+        a.append(el('span', 'home-name', s.title), el('span', 'home-sub', s.subtitle));
+        card.append(a, starButton(s));
+        grid.appendChild(card);
+      });
+      sec.appendChild(grid);
+      parts.push(sec);
+    });
+    if (!hits.length) parts.push(el('p', 'search-empty', 'Kein Rechner gefunden.'));
+    homeList.replaceChildren(...parts);
+  }
+
+  homeSearch.addEventListener('input', renderHome);
+  homeSearch.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const first = homeList.querySelector('.home-link');
+    if (first) location.hash = first.getAttribute('href');
+  });
 
   // --- Search ---------------------------------------------------------------
 
@@ -527,12 +615,7 @@
         a.append(el('span', 'search-name', s.title), el('span', 'hint', s.subtitle));
         if (score && s.id === score.id) a.setAttribute('aria-current', 'page');
         a.addEventListener('click', () => search.close());
-        const star = el('button', 'star');
-        star.type = 'button';
-        star.setAttribute('aria-pressed', String(isFav(s.id)));
-        star.setAttribute('aria-label', `${s.short} ${isFav(s.id) ? 'aus Favoriten entfernen' : 'zu Favoriten hinzufügen'}`);
-        star.addEventListener('click', () => toggleFav(s.id));
-        row.append(a, star);
+        row.append(a, starButton(s));
         sec.appendChild(row);
       });
       sections.push(sec);
@@ -566,7 +649,8 @@
     if (e.key !== '/' || search.open || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.closest('input, textarea')) return;
     e.preventDefault();
-    openSearch();
+    if (!home.hidden) homeSearch.focus();
+    else openSearch();
   });
 
   // --- Wiring ---------------------------------------------------------------
@@ -588,10 +672,12 @@
   // Forget every entry in every calculator, e.g. before the next patient.
   $('new-patient').addEventListener('click', () => {
     [valuesById, rawById, shared].forEach((o) => Object.keys(o).forEach((k) => delete o[k]));
-    valuesById[score.id] = {};
-    rawById[score.id] = {};
-    renderForm();
-    update();
+    if (score) {
+      valuesById[score.id] = {};
+      rawById[score.id] = {};
+      renderForm();
+      update();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast('Alle Eingaben gelöscht');
   });
@@ -641,6 +727,7 @@
     if (document.visibilityState === 'visible') checkForUpdate();
   });
 
+  $('home-intro').textContent = `${SCORES.length} klinische Scores und Rechner für Notaufnahme und Station – mit Anwendungshinweisen, Interpretation und Originalquelle.`;
   $('version').textContent = `Version ${VERSION.number} · Stand ${formatDate(VERSION.date)}`;
   $('feedback').href = issueUrl(null);
 

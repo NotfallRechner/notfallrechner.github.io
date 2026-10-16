@@ -16,7 +16,7 @@
 <body>
   <header class="top">
     <div class="brand-row">
-      <div class="brand">NotfallRechner</div>
+      <a class="brand" href="#" title="Zur Startseite">NotfallRechner</a>
       <button id="new-patient" type="button" class="new-patient" title="Alle Eingaben in allen Rechnern löschen">Neuer Patient</button>
       <button id="search-open" type="button" class="search-open" aria-keyshortcuts="/" title="Suchen ( / )">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -27,6 +27,21 @@
   </header>
 
   <main>
+    <section id="home" class="home" hidden>
+      <h1 class="home-title">NotfallRechner</h1>
+      <p id="home-intro" class="home-intro"></p>
+      <div class="home-search">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="home-search" type="search" placeholder="Rechner oder Diagnose suchen …" aria-label="Rechner suchen" autocomplete="off" enterkeyhint="go">
+      </div>
+      <div id="home-list" class="home-list"></div>
+      <p class="home-tip">
+        Mit ★ markierte Rechner erscheinen oben in der Leiste. Über das Browsermenü
+        („Zum Startbildschirm hinzufügen“) lässt sich der NotfallRechner als App installieren – er funktioniert dann auch offline.
+      </p>
+    </section>
+
+    <div id="calc">
     <div class="head">
       <div>
         <h1 id="title"></h1>
@@ -45,10 +60,11 @@
     <div id="form" class="form"></div>
 
     <section id="detail" class="detail" aria-live="polite"></section>
+    </div>
 
     <p class="disclaimer">
       Entscheidungshilfe für medizinisches Fachpersonal. Kein Medizinprodukt; ersetzt nicht die klinische Beurteilung.
-      Eingaben werden weder gespeichert noch übertragen; nur Favoriten und Anzeigeeinstellungen merkt sich der Browser.
+      Eingaben werden weder gespeichert noch übertragen; nur Favoriten, zuletzt genutzte Rechner und Anzeigeeinstellungen merkt sich der Browser.
     </p>
     <p class="footer"><span id="version"></span> · <a id="feedback" target="_blank" rel="noopener">Fehler oder Wunsch melden</a></p>
   </main>
