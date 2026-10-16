@@ -88,10 +88,18 @@ button { font: inherit; color: inherit; }
   max-width: 720px;
   margin: 0 auto;
   padding: 8px 16px 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex-wrap: wrap;
 }
-.tabs::-webkit-scrollbar { display: none; }
+.tabs-empty { margin: 0; font-size: 14px; color: var(--muted); }
+.tabs-empty-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .tab {
   flex: none;
   padding: 7px 14px;
@@ -104,13 +112,11 @@ button { font: inherit; color: inherit; }
   font-weight: 500;
   white-space: nowrap;
 }
-.tab.fav::before { content: "★ "; color: var(--mid); }
 .tab[aria-current="page"] {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
-.tab[aria-current="page"].fav::before { color: inherit; }
 @media (prefers-color-scheme: dark) {
   .tab[aria-current="page"] { color: #0b1020; }
 }
@@ -257,7 +263,7 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
   min-width: 0;
 }
 .choice.missing { border-color: var(--mid); }
-.choice { scroll-margin-top: 110px; }
+.choice { scroll-margin-top: calc(var(--header-h, 100px) + 12px); }
 .choice-label { float: left; width: 100%; padding: 0; font-weight: 600; }
 .choice-label + * { clear: both; }
 .choice > .hint { margin: 0 0 2px; }
@@ -536,6 +542,11 @@ h1 { hyphens: auto; overflow-wrap: break-word; margin: 0; font-size: 26px; line-
   .options { grid-template-columns: 1fr; gap: 6px; }
   .option { min-height: 44px; align-items: center; }
   .opt-text { padding-top: 0; }
+}
+
+@media (max-width: 520px) {
+  .tabs { gap: 5px; }
+  .tab { padding: 5px 11px; font-size: 14px; }
 }
 
 @media (max-width: 380px) {

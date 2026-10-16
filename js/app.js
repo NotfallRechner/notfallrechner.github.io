@@ -61,11 +61,20 @@
     if (search.open) renderSearch();
   }
 
-  // Favourites first, then the rest in their usual order.
+  // Only favourites appear in the bar; everything else is reached via search.
   function renderNav() {
-    const ordered = SCORES.filter((s) => isFav(s.id)).concat(SCORES.filter((s) => !isFav(s.id)));
-    nav.replaceChildren(...ordered.map((s) => {
-      const a = el('a', isFav(s.id) ? 'tab fav' : 'tab', s.short);
+    const list = SCORES.filter((s) => isFav(s.id));
+    if (!list.length) {
+      const empty = el('p', 'tabs-empty');
+      const link = el('button', 'tabs-empty-link', 'Scores durchsuchen');
+      link.type = 'button';
+      link.addEventListener('click', openSearch);
+      empty.append('Noch keine Favoriten. Mit ★ beim Score oder in der Suche hinzufügen – ', link);
+      nav.replaceChildren(empty);
+      return;
+    }
+    nav.replaceChildren(...list.map((s) => {
+      const a = el('a', 'tab', s.short);
       a.href = '#' + s.id;
       a.dataset.id = s.id;
       if (score && s.id === score.id) a.setAttribute('aria-current', 'page');
@@ -368,12 +377,8 @@
     valuesById[score.id] = valuesById[score.id] || {};
     rawById[score.id] = rawById[score.id] || {};
     nav.querySelectorAll('.tab').forEach((a) => {
-      if (a.dataset.id === score.id) {
-        a.setAttribute('aria-current', 'page');
-        a.scrollIntoView({ block: 'nearest', inline: 'center' });
-      } else {
-        a.removeAttribute('aria-current');
-      }
+      if (a.dataset.id === score.id) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
     });
     $('title').textContent = score.title;
     $('subtitle').textContent = score.subtitle;
@@ -474,6 +479,13 @@
     select(location.hash.slice(1));
     window.scrollTo(0, 0);
   });
+
+  // The header grows when favourites wrap onto more rows; keep scroll targets
+  // from ending up underneath it.
+  const header = document.querySelector('.top');
+  const syncHeader = () => document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+  if ('ResizeObserver' in window) new ResizeObserver(syncHeader).observe(header);
+  else syncHeader();
 
   renderNav();
   select(location.hash.slice(1));
