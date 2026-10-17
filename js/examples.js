@@ -134,6 +134,13 @@
       { values: { crea: 1.0, age: 50, sex: 1 }, expect: { total: 92, label: 'KDIGO G1' } },
       { values: { crea: 1.5, age: 75, sex: 0 }, expect: { total: 36, label: 'KDIGO G3b' } },
     ],
+    akin: [
+      { note: '+0,2 mg/dl, 1,2-fach', values: { base: 1.0, crea: 1.2, uo: 0 }, expect: { total: 0, label: 'Keine akute Nierenschädigung nach AKIN', level: 'low' } },
+      { note: '+0,4 mg/dl (≥ 0,3), 1,44-fach', values: { base: 0.9, crea: 1.3, uo: 0 }, expect: { total: 1, label: 'AKIN-Stadium 1' } },
+      { note: '1,8 / 0,9 = genau 2-fach → Kreatinin Stadium 1; Urin < 0,5 über 12 h → Stadium 2', values: { base: 0.9, crea: 1.8, uo: 2 }, expect: { total: 2, label: 'AKIN-Stadium 2' } },
+      { note: 'nur 1,17-fach, aber ≥ 4,0 mg/dl bei Anstieg um 0,6', values: { base: 3.6, crea: 4.2, uo: 4 }, expect: { total: 3, label: 'AKIN-Stadium 3' } },
+      { note: 'Nierenersatztherapie', values: { base: 1.0, crea: 1.4, uo: 0, rrt: true }, expect: { total: 3, label: 'AKIN-Stadium 3' } },
+    ],
     urin: [
       { note: 'FENa = 10 × 2 / (140 × 100) × 100', values: { sna: 140, screa: 2, una: 10, ucrea: 100 }, expect: { total: 0.14, label: 'Prärenales Muster' } },
       { note: 'FENa = 60 × 3 / (135 × 30) × 100', values: { sna: 135, screa: 3, una: 60, ucrea: 30 }, expect: { total: 4.44, label: 'Renales Muster' } },

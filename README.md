@@ -15,7 +15,7 @@ Kopierfunktion für die Dokumentation und Link zur Originalquelle.
 | Thrombose & Embolie | Wells LE (mit altersadjustiertem D-Dimer), PERC, Wells TVT |
 | Neurologie | NIHSS, ABCD², 4AT (Delir) |
 | Gastro & Leber | Glasgow-Blatchford-Score, Child-Pugh, MELD (labMELD) |
-| Niere & Labor | eGFR (CKD-EPI 2021), Urin-Indizes (FENa, FEUrea u. a.), Anionenlücke, albuminkorrigiertes Calcium, osmotische Lücke, Natrium-Korrektur |
+| Niere & Labor | eGFR (CKD-EPI 2021), AKIN-Stadien der akuten Nierenschädigung, Urin-Indizes (FENa, FEUrea u. a.), Anionenlücke, albuminkorrigiertes Calcium, osmotische Lücke, Natrium-Korrektur |
 | Medikamente & Infusion | Perfusor-Rechner (µg/kg/min ↔ ml/h) mit Spritzenliste nach Hausstandard |
 
 Reines HTML/CSS/JavaScript ohne Build-Schritt und ohne Abhängigkeiten.

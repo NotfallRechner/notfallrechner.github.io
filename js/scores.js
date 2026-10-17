@@ -1388,10 +1388,82 @@
         'Ist die Kreatinin-Schätzung fraglich, hilft die Kombination mit Cystatin C (CKD-EPI Kreatinin-Cystatin).',
       ],
       related: [
+        { id: 'akin', text: 'Kreatinin steigt akut an? AKIN-Stadium' },
         { id: 'urin', text: 'Akute Nierenschädigung: Urin-Indizes' },
       ],
       sources: [
         { label: 'Inker LA et al. New creatinine- and cystatin C-based equations to estimate GFR without race. N Engl J Med 2021;385:1737–1749', url: 'https://doi.org/10.1056/NEJMoa2102953' },
+      ],
+    },
+
+    {
+      id: 'akin',
+      group: 'Niere & Labor',
+      short: 'AKIN',
+      title: 'AKIN-Stadien der akuten Nierenschädigung',
+      subtitle: 'Akute Nierenschädigung nach Kreatininanstieg und Urinausscheidung einteilen (Acute Kidney Injury Network)',
+      keywords: 'AKI ANV akutes Nierenversagen akute Nierenschädigung Kreatininanstieg Oligurie Anurie Urinausscheidung Dialyse Nierenersatztherapie KDIGO RIFLE',
+      rule: true,
+      usage: {
+        when: 'Verdacht auf akute Nierenschädigung, z. B. bei Kreatininanstieg oder Oligurie auf der Intensivstation, nach Operationen, bei Sepsis oder Kontrastmittelgabe: Diagnose stellen und Schweregrad in Stadium 1–3 einteilen. Der Kreatininanstieg muss innerhalb von 48 Stunden aufgetreten sein; als Ausgangswert dient der niedrigste Wert dieses Zeitraums.',
+        not: 'Erst nach ausreichender Volumengabe und Ausschluss einer Harnabflussstörung anwenden. Ein langsamerer Anstieg (über bis zu 7 Tage) wird nur von den KDIGO-Kriterien erfasst. Die Urinausscheidung ist unter Diuretika nur eingeschränkt verwertbar. Nicht für die chronische Niereninsuffizienz.',
+      },
+      items: [
+        num('base', 'Kreatinin-Ausgangswert', CREA, 0.1, 30, { hint: 'niedrigster Wert der letzten 48 Stunden' }),
+        num('crea', 'Aktuelles Kreatinin', CREA, 0.1, 30, SHARED('crea')),
+        choice('uo', 'Urinausscheidung', [
+          pick('Nicht vermindert', { stage: 0, hint: '≥ 0,5 ml/kg/h' }),
+          pick('< 0,5 ml/kg/h über mehr als 6 Stunden', { stage: 1 }),
+          pick('< 0,5 ml/kg/h über mehr als 12 Stunden', { stage: 2 }),
+          pick('< 0,3 ml/kg/h über 24 Stunden oder Anurie über 12 Stunden', { stage: 3 }),
+          pick('Nicht erfasst', { stage: 0, key: 'unknown', hint: 'Einteilung nur nach Kreatinin' }),
+        ]),
+        flag('rrt', 'Nierenersatztherapie begonnen', 'zählt immer als Stadium 3'),
+      ],
+      max: 3,
+      compute(a) {
+        return Math.max(akinCreaStage(a), a.uo.stage, a.rrt ? 3 : 0);
+      },
+      interpret(total, a) {
+        const LEVEL = ['low', 'mid', 'high', 'high'];
+        const diff = a.crea - a.base;
+        const crea = akinCreaStage(a);
+        const rows = [
+          {
+            name: 'Kreatinin',
+            value: `${diff >= 0 ? '+' : ''}${formatNumber(diff, 2)} mg/dl`,
+            note: `${formatNumber(a.crea / a.base, 2)}-facher Ausgangswert${crea ? ` – Stadium ${crea}` : ' – kein Kriterium erfüllt'}`,
+            level: LEVEL[crea],
+          },
+          {
+            name: 'Urinausscheidung',
+            value: a.uo.key === 'unknown' ? 'nicht erfasst' : a.uo.stage ? `Stadium ${a.uo.stage}` : 'normal',
+            note: a.uo.label,
+            level: a.uo.key === 'unknown' ? 'pending' : LEVEL[a.uo.stage],
+          },
+        ];
+        if (a.rrt) rows.push({ name: 'Nierenersatztherapie', value: 'ja', note: 'Stadium 3', level: 'high' });
+        const base = { scoreName: 'AKIN', rows };
+        const cause = 'Ursache klären (prärenal, renal, postrenal – Sonographie), Nephrotoxine absetzen und Dosierungen an die Nierenfunktion anpassen, Volumenstatus und Kreislauf optimieren, Kreatinin und Urinausscheidung engmaschig kontrollieren.';
+        if (total === 0) {
+          const unknown = a.uo.key === 'unknown' ? ' Die Urinausscheidung wurde nicht berücksichtigt.' : '';
+          return Object.assign(base, { level: 'low', label: 'Keine akute Nierenschädigung nach AKIN', text: `Die Kriterien sind nicht erfüllt.${unknown} Bei Risikopatienten Kreatinin und Urinausscheidung weiter kontrollieren.` });
+        }
+        if (total === 1) return Object.assign(base, { level: 'mid', label: 'AKIN-Stadium 1', text: cause });
+        if (total === 2) return Object.assign(base, { level: 'high', label: 'AKIN-Stadium 2', text: `${cause} Nephrologische Mitbetreuung erwägen.` });
+        return Object.assign(base, { level: 'high', label: 'AKIN-Stadium 3', text: `${cause} Nephrologische Mitbetreuung; Indikation zur Nierenersatztherapie prüfen (therapierefraktäre Hyperkaliämie, Azidose, Überwässerung, urämische Komplikationen).` });
+      },
+      notes: [
+        'Diagnose: Anstieg des Kreatinins innerhalb von 48 Stunden um ≥ 0,3 mg/dl (≥ 26,5 µmol/l) oder auf ≥ 150 % des Ausgangswerts, oder Urinausscheidung < 0,5 ml/kg/h über mehr als 6 Stunden.',
+        'Stadium 1: Kreatinin + ≥ 0,3 mg/dl oder 1,5- bis 2-fach. Stadium 2: mehr als 2- bis 3-fach oder < 0,5 ml/kg/h über mehr als 12 Stunden. Stadium 3: mehr als 3-fach, Kreatinin ≥ 4,0 mg/dl (354 µmol/l) bei akutem Anstieg um ≥ 0,5 mg/dl, < 0,3 ml/kg/h über 24 Stunden, Anurie über 12 Stunden oder Nierenersatztherapie. Es zählt das höchste erreichte Stadium.',
+        'Die KDIGO-Kriterien (2012) übernehmen die Stadien weitgehend, werten aber auch einen Anstieg auf das 1,5-Fache innerhalb von 7 Tagen.',
+      ],
+      related: [
+        { id: 'urin', text: 'Prärenal oder renal? Urin-Indizes', when: (t) => t >= 1 },
+      ],
+      sources: [
+        { label: 'Mehta RL et al. Acute Kidney Injury Network: report of an initiative to improve outcomes in acute kidney injury. Crit Care 2007;11(2):R31', url: 'https://doi.org/10.1186/cc5713' },
+        { label: 'KDIGO Clinical Practice Guideline for Acute Kidney Injury. Kidney Int Suppl 2012;2(1):1–138', url: 'https://doi.org/10.1038/kisup.2012.1' },
       ],
     },
 
@@ -1451,6 +1523,7 @@
         'Die Urin-Anionenlücke ist nur bei hyperchlorämer metabolischer Azidose und einem Urin-Natrium ≥ 20 mmol/l verwertbar; Ketonurie und Medikamente mit Anionen (z. B. Penicilline) verfälschen sie.',
       ],
       related: [
+        { id: 'akin', text: 'Schweregrad der Nierenschädigung: AKIN-Stadium' },
         { id: 'anion-gap', text: 'Metabolische Azidose: Anionenlücke im Serum' },
       ],
       sources: [
@@ -1840,6 +1913,17 @@
 
     const primary = a.diur && feureaRow ? feureaRow : fenaRow;
     return { rows, primary };
+  }
+
+  // AKIN stage from the creatinine rise alone. Ratio and difference are rounded
+  // so that e.g. 1,8 / 0,9 counts as exactly twice the baseline (stage 1).
+  function akinCreaStage(a) {
+    const ratio = Math.round((a.crea / a.base) * 1000) / 1000;
+    const diff = Math.round((a.crea - a.base) * 1000) / 1000;
+    if (ratio > 3 || (a.crea >= 4 && diff >= 0.5)) return 3;
+    if (ratio > 2) return 2;
+    if (ratio >= 1.5 || diff >= 0.3) return 1;
+    return 0;
   }
 
   function anionGap(a) {

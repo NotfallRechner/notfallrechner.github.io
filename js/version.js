@@ -4,8 +4,8 @@
   'use strict';
 
   const VERSION = {
-    number: '2.2.0',
-    date: '2026-10-16',
+    number: '2.3.0',
+    date: '2026-10-17',
     repo: 'https://github.com/NotfallRechner/notfallrechner.github.io',
   };
 
