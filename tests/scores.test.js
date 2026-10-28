@@ -289,6 +289,23 @@ test('Urine indices: diuretics switch to FEUrea', () => {
   assert.ok(r.result.rows.some((x) => x.name === 'BUN/Kreatinin'));
 });
 
+test('Urine indices: FEUA', () => {
+  const s = byId.urin;
+  const base = { sna: 140, screa: 2, una: 80, ucrea: 100, diur: true };
+  // FEUA = 20 × 2 / (8 × 100) × 100 = 5 %
+  const r = evaluate(s, Object.assign({ sua: 8, uua: 20 }, base));
+  assert.equal(r.name, 'FEUA');
+  assert.equal(r.total, 5);
+  assert.equal(r.result.label, 'Prärenales Muster');
+  // FEUrea takes precedence under diuretics when both are given
+  const both = evaluate(s, Object.assign({ sua: 8, uua: 20, surea: 100, uurea: 500 }, base));
+  assert.equal(both.name, 'FEUrea');
+  // Without diuretics FEUA is a supporting row: 80 × 2 / (5 × 100) × 100 = 32 % → renal
+  const row = evaluate(s, { sna: 140, screa: 2, una: 10, ucrea: 100, sua: 5, uua: 80 }).result.rows.find((x) => x.name === 'FEUA');
+  assert.equal(row.value, '32 %');
+  assert.equal(row.level, 'high');
+});
+
 test('Urine anion gap', () => {
   const s = byId.urin;
   const row = (v) => evaluate(s, Object.assign({ sna: 140, screa: 1, ucrea: 100 }, v)).result.rows.find((x) => x.name === 'Urin-Anionenlücke');
